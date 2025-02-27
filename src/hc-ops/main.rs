@@ -13,6 +13,7 @@ use holochain_zome_types::prelude::{
 use std::collections::BTreeSet;
 use std::io::Write;
 use std::net::{IpAddr, SocketAddr};
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -27,7 +28,21 @@ mod schema;
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    let mut conn = diesel::prelude::SqliteConnection::establish("development.sqlite3")?;
+    let db = if let Ok(url) = std::env::var("DATABASE_URL") {
+        PathBuf::from(url)
+    } else {
+        let dir = xdg::BaseDirectories::new()
+            .context("Could not discover directory layout")?
+            .create_config_directory(Path::new("hc-ops"))
+            .context("Failed to create config directory")?;
+
+        std::fs::create_dir_all(&dir).context("Failed to create config directory")?;
+
+        dir.join("state.sqlite3")
+    };
+
+    let mut conn =
+        SqliteConnection::establish(db.display().to_string().as_str())?;
     conn.run_pending_migrations(MIGRATIONS)
         .map_err(|e| anyhow::anyhow!("Failed to run migrations: {}", e))?;
 
