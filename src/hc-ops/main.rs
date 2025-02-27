@@ -135,7 +135,8 @@ async fn main() -> anyhow::Result<()> {
                         .connect_app_client(
                             IpAddr::from_str(tag.address.as_str())?,
                             app_id.clone(),
-                            "hc-ops",
+                            // TODO Not exposed by the client
+                            "holochain_websocket", // "hc-ops",
                             signer.clone(),
                         )
                         .await?;
