@@ -1,6 +1,7 @@
 #[cfg(feature = "discover")]
 pub mod discover;
 pub mod ops;
+pub mod readable;
 
 #[derive(Debug, thiserror::Error)]
 pub enum HcOpsError {

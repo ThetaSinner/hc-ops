@@ -44,10 +44,18 @@ pub fn list_addr_tags(conn: &mut SqliteConnection) -> anyhow::Result<Vec<AddrTag
         .context("Failed to load addr tags")
 }
 
-pub fn get_tag(conn: &mut SqliteConnection, tag: &str) -> anyhow::Result<Option<AddrTag>> {
+pub fn get_addr_tag(conn: &mut SqliteConnection, tag: &str) -> anyhow::Result<Option<AddrTag>> {
     schema::addr_tag::table
         .find(tag)
         .first(conn)
         .optional()
         .context("Failed to load addr tag")
+}
+
+pub fn delete_addr_tag(conn: &mut SqliteConnection, tag: &str) -> anyhow::Result<()> {
+    diesel::delete(schema::addr_tag::table.filter(schema::addr_tag::tag.eq(tag)))
+        .execute(conn)
+        .context("Failed to delete addr tag")?;
+
+    Ok(())
 }

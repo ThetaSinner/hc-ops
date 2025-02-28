@@ -1,3 +1,7 @@
+pub(crate) mod init;
+pub(crate) mod admin;
+pub(crate )mod tag;
+
 use clap::{Args, Parser, Subcommand};
 use std::net::IpAddr;
 
@@ -51,6 +55,10 @@ pub enum TagCommands {
     },
     /// List all tags
     List,
+    Delete {
+        /// The tag to delete
+        tag: String,
+    }
 }
 
 #[derive(Debug, Args)]
