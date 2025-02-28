@@ -8,7 +8,7 @@ pub struct Cli {
     pub command: Commands,
 }
 
-#[derive(Subcommand)]
+#[derive(Debug, Subcommand)]
 pub enum Commands {
     /// Manage tags for Holochain processes
     Tag(TagArgs),
@@ -21,7 +21,6 @@ pub enum Commands {
 }
 
 #[derive(Debug, Args)]
-#[command(flatten_help = true)]
 pub struct TagArgs {
     #[command(subcommand)]
     pub command: TagCommands,
@@ -30,6 +29,7 @@ pub struct TagArgs {
 #[derive(Debug, Subcommand)]
 pub enum TagCommands {
     /// Tag a Holochain process
+    #[command(arg_required_else_help = true)]
     Add {
         /// The address to when connecting to Holochain
         #[arg(long)]
@@ -54,7 +54,6 @@ pub enum TagCommands {
 }
 
 #[derive(Debug, Args)]
-#[command(flatten_help = true)]
 pub struct AdminArgs {
     /// The tag to use when connecting to Holochain
     #[arg(long, short)]
@@ -70,7 +69,6 @@ pub enum AdminCommands {
 }
 
 #[derive(Debug, Args)]
-#[command(flatten_help = true)]
 pub struct InitArgs {
     /// The tag to use when connecting to Holochain
     #[arg(long, short)]
@@ -84,6 +82,7 @@ pub struct InitArgs {
 pub enum InitCommands {
     Check,
 
+    #[command(arg_required_else_help = true)]
     Execute {
         /// The app id to initialise cells for
         app_id: String,
