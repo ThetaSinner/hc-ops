@@ -36,6 +36,7 @@ pub async fn interactive_discover_holochain_addr(
     };
 
     if let Some(addr) = discover_admin_addr(&ports).await? {
+        println!("Selected process {}, at address {}", proc.pid, addr);
         Ok(addr)
     } else {
         anyhow::bail!("No admin ports found for process: {proc:?}.");
