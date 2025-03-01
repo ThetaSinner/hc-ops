@@ -5,7 +5,7 @@ use tabled::settings::Style;
 use tabled::{Table, Tabled};
 
 fn flush(mut write: impl Write) -> io::Result<()> {
-    write.write(b"\n")?;
+    let _ = write.write(b"\n")?;
     write.flush()?;
     Ok(())
 }
@@ -27,7 +27,7 @@ where
     Item: Tabled,
 {
     fn render(&self, mut write: impl Write) -> io::Result<()> {
-        write.write(
+        let _ = write.write(
             Table::new(self)
                 .with(Style::modern_rounded())
                 .to_string()

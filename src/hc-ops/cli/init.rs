@@ -5,15 +5,18 @@ use diesel::SqliteConnection;
 use hc_ops::ops::AdminWebsocketExt;
 use holochain_client::ZomeCallTarget;
 use holochain_conductor_api::{AppStatusFilter, CellInfo};
+use holochain_zome_types::capability::GrantedFunctions;
 use holochain_zome_types::init::InitCallbackResult;
+use holochain_zome_types::prelude::{ExternIO, FunctionName, ZomeName};
 use std::collections::BTreeSet;
 use std::net::IpAddr;
 use std::str::FromStr;
 use std::sync::Arc;
-use holochain_zome_types::capability::GrantedFunctions;
-use holochain_zome_types::prelude::{ExternIO, FunctionName, ZomeName};
 
-pub(crate) async fn handle_init_command(conn: &mut SqliteConnection, args: InitArgs) -> anyhow::Result<()> {
+pub(crate) async fn handle_init_command(
+    conn: &mut SqliteConnection,
+    args: InitArgs,
+) -> anyhow::Result<()> {
     let (client, tag) = connect_admin_client(conn, &args.tag).await?;
 
     match args.command {
@@ -34,7 +37,7 @@ pub(crate) async fn handle_init_command(conn: &mut SqliteConnection, args: InitA
 
                                 out.push(render::InitStatus {
                                     app_id: &app.installed_app_id,
-                                    role: &role,
+                                    role,
                                     dna_hash: cell.cell_id.dna_hash(),
                                     initialised,
                                 });

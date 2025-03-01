@@ -2,11 +2,18 @@
 pub mod discover;
 pub mod ops;
 pub mod readable;
+pub mod retrieve;
 
 #[derive(Debug, thiserror::Error)]
 pub enum HcOpsError {
     #[error("Holochain client error: {0:?}")]
     HolochainClient(holochain_client::ConductorApiError),
+
+    #[error("IO error: {0}")]
+    IO(#[from] std::io::Error),
+
+    #[error("Database error: {0}")]
+    Database(#[from] diesel::result::Error),
 
     #[error("Other error: {0}")]
     Other(#[from] Box<dyn std::error::Error + Send + Sync>),

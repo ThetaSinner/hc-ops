@@ -1,7 +1,7 @@
-use std::io::Write;
-use diesel::SqliteConnection;
 use crate::cli::{AdminArgs, AdminCommands};
 use crate::connect_admin_client;
+use diesel::SqliteConnection;
+use std::io::Write;
 
 pub(crate) async fn handle_admin_command(
     conn: &mut SqliteConnection,

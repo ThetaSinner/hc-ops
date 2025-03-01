@@ -1,5 +1,5 @@
 use crate::cli::{TagArgs, TagCommands};
-use crate::{data, interactive};
+use crate::data;
 use diesel::SqliteConnection;
 use std::net::SocketAddr;
 
@@ -20,7 +20,8 @@ pub(crate) async fn handle_tag_command(
             } else {
                 #[cfg(feature = "discover")]
                 {
-                    let addr = interactive::interactive_discover_holochain_addr(name).await?;
+                    let addr =
+                        crate::interactive::interactive_discover_holochain_addr(name).await?;
                     data::insert_addr_tag(conn, &tag, addr)?;
                 }
             }
