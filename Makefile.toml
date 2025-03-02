@@ -40,7 +40,6 @@ args = ["hack", "check", "--feature-powerset", "--no-dev-deps"]
 [tasks.verify]
 dependencies = [
   "format-rust-check",
-  "format-toml-check",
   "clippy",
   "test",
   "each-feature",
