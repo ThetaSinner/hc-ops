@@ -15,6 +15,9 @@ pub enum HcOpsError {
     #[error("Database error: {0}")]
     Database(#[from] diesel::result::Error),
 
+    #[error("JSON error: {0}")]
+    JSON(#[from] serde_json::Error),
+
     #[error("Other error: {0}")]
     Other(#[from] Box<dyn std::error::Error + Send + Sync>),
 

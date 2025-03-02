@@ -37,8 +37,7 @@ pub fn open_holochain_database<P: AsRef<Path>>(
     };
 
     let mut conn = SqliteConnection::establish(
-        path
-            .to_str()
+        path.to_str()
             .ok_or_else(|| HcOpsError::Other("Invalid database path".into()))?,
     )
     .map_err(HcOpsError::other)?;

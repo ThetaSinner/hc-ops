@@ -73,7 +73,11 @@ pub struct AdminArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum AdminCommands {
-    ListApps,
+    ListApps {
+        /// Get full output, rather than the default summary
+        #[arg(long)]
+        full: bool,
+    },
 }
 
 #[derive(Debug, Args)]
