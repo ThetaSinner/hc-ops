@@ -10,6 +10,7 @@ use std::path::Path;
 
 pub enum DbKind {
     Dht,
+    Cache,
 }
 
 pub fn load_database_key<P: AsRef<Path>>(
@@ -26,14 +27,15 @@ pub fn load_database_key<P: AsRef<Path>>(
 
 pub fn open_holochain_database<P: AsRef<Path>>(
     data_root_path: P,
-    kind: DbKind,
-    dna_hash: DnaHash,
+    kind: &DbKind,
+    dna_hash: &DnaHash,
     key: Option<&mut crypt::Key>,
 ) -> HcOpsResult<SqliteConnection> {
     let database_path = data_root_path.as_ref().join("databases");
 
     let path = match kind {
         DbKind::Dht => database_path.join("dht").join(dna_hash.to_string()),
+        DbKind::Cache => database_path.join("cache").join(dna_hash.to_string()),
     };
 
     let mut conn = SqliteConnection::establish(

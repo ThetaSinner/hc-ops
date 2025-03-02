@@ -1,6 +1,7 @@
 pub(crate) mod admin;
 pub(crate) mod agent_tag;
 pub(crate) mod conductor_tag;
+pub(crate) mod explore;
 pub(crate) mod init;
 
 use clap::{Args, Parser, Subcommand};
@@ -28,6 +29,9 @@ pub enum Commands {
 
     /// Check and run app initialisation
     Init(InitArgs),
+
+    /// Explore Holochain data
+    Explore(ExploreArgs),
 }
 
 #[derive(Debug, Args)]
@@ -155,4 +159,14 @@ pub enum InitCommands {
         /// The app id to initialise cells for
         app_id: String,
     },
+}
+
+#[derive(Debug, Args)]
+pub struct ExploreArgs {
+    /// The tag to use when connecting to Holochain
+    #[arg(long, short)]
+    pub tag: String,
+
+    /// The path to the Holochain data directory
+    pub data_root_path: PathBuf,
 }

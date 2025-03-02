@@ -103,6 +103,7 @@ pub fn list_agent_tags(conn: &mut SqliteConnection) -> anyhow::Result<Vec<AgentT
         .context("Failed to load agent tags")
 }
 
+#[allow(dead_code)]
 pub fn get_agent_tag(
     conn: &mut SqliteConnection,
     agent: &AgentPubKey,

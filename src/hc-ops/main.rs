@@ -10,6 +10,7 @@ use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 // use hc_ops::retrieve::{DbKind, get_some, load_database_key, open_holochain_database};
 // use holochain_zome_types::prelude::HoloHashB64;
 use crate::cli::agent_tag::handle_agent_tag_command;
+use crate::cli::explore::handle_explore_command;
 use std::net::{IpAddr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -18,6 +19,7 @@ const MIGRATIONS: EmbeddedMigrations = diesel_migrations::embed_migrations!();
 
 mod cli;
 mod data;
+mod explore;
 mod interactive;
 mod render;
 mod schema;
@@ -72,6 +74,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Init(args) => {
             handle_init_command(&mut conn, args).await?;
+        }
+        Commands::Explore(args) => {
+            handle_explore_command(&mut conn, args).await?;
         }
     }
 
