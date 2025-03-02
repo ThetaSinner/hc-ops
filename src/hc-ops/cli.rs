@@ -1,8 +1,10 @@
 pub(crate) mod admin;
+pub(crate) mod agent_tag;
+pub(crate) mod conductor_tag;
 pub(crate) mod init;
-pub(crate) mod tag;
 
 use clap::{Args, Parser, Subcommand};
+use holochain_zome_types::prelude::AgentPubKeyB64;
 use std::net::IpAddr;
 use std::path::PathBuf;
 
@@ -15,8 +17,11 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    /// Manage tags for Holochain processes
-    Tag(TagArgs),
+    /// Tag a Holochain conductor
+    ConductorTag(ConductorTagArgs),
+
+    /// Tag an agent to make it easier to identify them in output
+    AgentTag(AgentTagArgs),
 
     /// Make an admin call to the conductor
     Admin(AdminArgs),
@@ -26,14 +31,14 @@ pub enum Commands {
 }
 
 #[derive(Debug, Args)]
-pub struct TagArgs {
+pub struct ConductorTagArgs {
     #[command(subcommand)]
-    pub command: TagCommands,
+    pub command: ConductorTagCommands,
 }
 
 #[derive(Debug, Subcommand)]
-pub enum TagCommands {
-    /// Tag a Holochain process
+pub enum ConductorTagCommands {
+    /// Tag a Holochain address
     #[command(arg_required_else_help = true)]
     Add {
         /// The address to when connecting to Holochain
@@ -56,6 +61,32 @@ pub enum TagCommands {
     },
     /// List all tags
     List,
+    Delete {
+        /// The tag to delete
+        tag: String,
+    },
+}
+
+#[derive(Debug, Args)]
+pub struct AgentTagArgs {
+    #[command(subcommand)]
+    pub command: AgentTagCommands,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum AgentTagCommands {
+    /// Tag an agent
+    #[command(arg_required_else_help = true)]
+    Add {
+        /// The agent to tag
+        agent: AgentPubKeyB64,
+
+        /// The tag to assign
+        tag: String,
+    },
+    /// List all tags
+    List,
+    /// Delete a tag
     Delete {
         /// The tag to delete
         tag: String,

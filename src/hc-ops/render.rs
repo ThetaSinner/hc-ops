@@ -1,5 +1,6 @@
+use crate::data::{AgentTag, ConductorTag};
 use holochain_conductor_api::{StorageBlob, StorageInfo};
-use holochain_zome_types::prelude::DnaHash;
+use holochain_zome_types::prelude::{AgentPubKey, DnaHash};
 use std::io;
 use std::io::Write;
 use tabled::settings::Style;
@@ -73,5 +74,40 @@ impl Render for StorageInfo {
             .collect::<Vec<_>>();
 
         t.render(write)
+    }
+}
+
+#[derive(Tabled)]
+pub struct AgentTagTable {
+    pub agent: String,
+    pub tag: String,
+}
+
+impl From<AgentTag> for AgentTagTable {
+    fn from(tag: AgentTag) -> Self {
+        Self {
+            agent: format!(
+                "{:?}",
+                AgentPubKey::from_raw_39(tag.agent).expect("Invalid agent key stored")
+            ),
+            tag: tag.tag,
+        }
+    }
+}
+
+#[derive(Tabled)]
+pub struct ConductorTagTable {
+    pub tag: String,
+    pub address: String,
+    pub port: i32,
+}
+
+impl From<ConductorTag> for ConductorTagTable {
+    fn from(tag: ConductorTag) -> Self {
+        Self {
+            tag: tag.tag,
+            address: tag.address,
+            port: tag.port,
+        }
     }
 }

@@ -1,14 +1,15 @@
 use crate::cli::admin::handle_admin_command;
+use crate::cli::conductor_tag::handle_conductor_tag_command;
 use crate::cli::init::handle_init_command;
-use crate::cli::tag::handle_tag_command;
 use crate::cli::{Cli, Commands};
-use crate::data::AddrTag;
+use crate::data::ConductorTag;
 use anyhow::Context;
 use clap::Parser;
 use diesel::{Connection, SqliteConnection};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 // use hc_ops::retrieve::{DbKind, get_some, load_database_key, open_holochain_database};
 // use holochain_zome_types::prelude::HoloHashB64;
+use crate::cli::agent_tag::handle_agent_tag_command;
 use std::net::{IpAddr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -60,8 +61,11 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to run migrations: {}", e))?;
 
     match cli.command {
-        Commands::Tag(args) => {
-            handle_tag_command(&mut conn, args).await?;
+        Commands::ConductorTag(args) => {
+            handle_conductor_tag_command(&mut conn, args).await?;
+        }
+        Commands::AgentTag(args) => {
+            handle_agent_tag_command(&mut conn, args).await?;
         }
         Commands::Admin(args) => {
             handle_admin_command(&mut conn, args).await?;
@@ -77,9 +81,9 @@ async fn main() -> anyhow::Result<()> {
 async fn connect_admin_client(
     conn: &mut SqliteConnection,
     tag: &str,
-) -> anyhow::Result<(holochain_client::AdminWebsocket, AddrTag)> {
-    let tag =
-        data::get_addr_tag(conn, tag)?.ok_or_else(|| anyhow::anyhow!("No such tag: {}", tag))?;
+) -> anyhow::Result<(holochain_client::AdminWebsocket, ConductorTag)> {
+    let tag = data::get_conductor_tag(conn, tag)?
+        .ok_or_else(|| anyhow::anyhow!("No such tag: {}", tag))?;
 
     let client = holochain_client::AdminWebsocket::connect(SocketAddr::new(
         IpAddr::from_str(&tag.address).context("Invalid IP address stored")?,

@@ -1,14 +1,15 @@
-use crate::cli::{TagArgs, TagCommands};
+use crate::cli::{ConductorTagArgs, ConductorTagCommands};
 use crate::data;
+use crate::render::{ConductorTagTable, Render};
 use diesel::SqliteConnection;
 use std::net::SocketAddr;
 
-pub(crate) async fn handle_tag_command(
+pub(crate) async fn handle_conductor_tag_command(
     conn: &mut SqliteConnection,
-    args: TagArgs,
+    args: ConductorTagArgs,
 ) -> anyhow::Result<()> {
     match args.command {
-        TagCommands::Add {
+        ConductorTagCommands::Add {
             tag,
             addr,
             port,
@@ -16,26 +17,27 @@ pub(crate) async fn handle_tag_command(
             name,
         } => {
             if let (Some(addr), Some(port)) = (addr, port) {
-                data::insert_addr_tag(conn, &tag, SocketAddr::new(addr, port))?;
+                data::insert_conductor_tag(conn, &tag, SocketAddr::new(addr, port))?;
             } else {
                 #[cfg(feature = "discover")]
                 {
                     let addr =
                         crate::interactive::interactive_discover_holochain_addr(name).await?;
-                    data::insert_addr_tag(conn, &tag, addr)?;
+                    data::insert_conductor_tag(conn, &tag, addr)?;
                 }
             }
 
             println!("Added tag: {}", tag);
         }
-        TagCommands::List => {
-            let tags = data::list_addr_tags(conn)?;
+        ConductorTagCommands::List => {
+            let tags = data::list_conductor_tags(conn)?;
 
-            for tag in tags {
-                println!("{: <15}: ws://{}:{}", tag.tag, tag.address, tag.port);
-            }
+            tags.into_iter()
+                .map(Into::into)
+                .collect::<Vec<ConductorTagTable>>()
+                .render(std::io::stdout())?;
         }
-        TagCommands::Delete { tag } => {
+        ConductorTagCommands::Delete { tag } => {
             data::delete_addr_tag(conn, &tag)?;
 
             println!("Deleted tag: {}", tag);
