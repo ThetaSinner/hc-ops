@@ -24,26 +24,64 @@ pub async fn start_explorer(
     let mut key = load_database_key(data_root_path, pass)?;
 
     let apps = client.list_apps(None).await?;
-    let use_app = select_app(&apps)?;
 
-    let use_dna = select_dna(use_app)?;
+    'outer: loop {
+        let use_app = select_app(&apps)?;
+        if use_app.is_none() {
+            break 'outer;
+        }
+        let use_app = use_app.unwrap();
 
-    let mut authored = open_holochain_database(
-        data_root_path,
-        &DbKind::Authored(use_app.agent_pub_key.clone()),
-        use_dna,
-        key.as_mut(),
-    )
-    .context("Failed to open the authored database")?;
-    let mut dht = open_holochain_database(data_root_path, &DbKind::Dht, use_dna, key.as_mut())
-        .context("Failed to open the DHT database")?;
-    let mut cache = open_holochain_database(data_root_path, &DbKind::Cache, use_dna, key.as_mut())
-        .context("Failed to open the cache database")?;
+        loop {
+            let use_dna = select_dna(use_app)?;
+            if use_dna.is_none() {
+                break;
+            }
+            let use_dna = use_dna.unwrap();
 
+            loop {
+                let mut authored = open_holochain_database(
+                    data_root_path,
+                    &DbKind::Authored(use_app.agent_pub_key.clone()),
+                    use_dna,
+                    key.as_mut(),
+                )
+                .context("Failed to open the authored database")?;
+                let mut dht =
+                    open_holochain_database(data_root_path, &DbKind::Dht, use_dna, key.as_mut())
+                        .context("Failed to open the DHT database")?;
+                let mut cache =
+                    open_holochain_database(data_root_path, &DbKind::Cache, use_dna, key.as_mut())
+                        .context("Failed to open the cache database")?;
+
+                match run_explorer(&mut authored, &mut dht, &mut cache) {
+                    Ok(true) => break 'outer,
+                    Ok(false) => {
+                        break;
+                    }
+                    Err(e) => {
+                        eprintln!("Error: {:#?}", e);
+                    }
+                }
+            }
+        }
+    }
+
+    println!("Thank you for exploring!");
+
+    Ok(())
+}
+
+fn run_explorer(
+    authored: &mut SqliteConnection,
+    dht: &mut SqliteConnection,
+    cache: &mut SqliteConnection,
+) -> anyhow::Result<bool> {
     enum Operation {
         WhoIsHere,
         AgentChain,
         Dump,
+        Back,
         Exit,
     }
 
@@ -53,6 +91,7 @@ pub async fn start_explorer(
                 Operation::WhoIsHere => write!(f, "Who is here?"),
                 Operation::AgentChain => write!(f, "View an agent chain"),
                 Operation::Dump => write!(f, "Dump"),
+                Operation::Back => write!(f, "Back"),
                 Operation::Exit => write!(f, "Exit"),
             }
         }
@@ -62,6 +101,7 @@ pub async fn start_explorer(
         Operation::WhoIsHere,
         Operation::AgentChain,
         Operation::Dump,
+        Operation::Back,
         Operation::Exit,
     ];
     loop {
@@ -73,7 +113,7 @@ pub async fn start_explorer(
 
         match operations[selected] {
             Operation::WhoIsHere => {
-                let discovered = list_discovered_agents(&mut dht, &mut cache)?;
+                let discovered = list_discovered_agents(dht, cache)?;
 
                 println!(
                     "Discovered agents: {}",
@@ -89,12 +129,12 @@ pub async fn start_explorer(
                     .context("Invalid agent key")?
                     .into();
 
-                let chain = get_agent_chain(&mut dht, &mut cache, &key)?;
+                let chain = get_agent_chain(dht, cache, &key)?;
 
                 println!("Agent chain: {}", chain.as_human_readable_pretty()?);
             }
             Operation::Dump => {
-                let out = get_all_dht_ops(&mut authored);
+                let out = get_all_dht_ops(authored);
                 println!(
                     "Authored ops: {}\n\n",
                     out.into_iter()
@@ -104,7 +144,7 @@ pub async fn start_explorer(
                         .context("Could not convert authored ops")?
                 );
 
-                let out = get_all_actions(&mut authored);
+                let out = get_all_actions(authored);
                 println!(
                     "Authored actions: {}",
                     out.into_iter()
@@ -114,7 +154,7 @@ pub async fn start_explorer(
                         .context("Could not convert authored actions")?
                 );
 
-                let out = get_all_entries(&mut authored);
+                let out = get_all_entries(authored);
                 println!(
                     "Authored entries: {}",
                     out.into_iter()
@@ -124,7 +164,7 @@ pub async fn start_explorer(
                         .context("Could not convert authored entries")?
                 );
 
-                let out = get_all_dht_ops(&mut dht);
+                let out = get_all_dht_ops(dht);
                 println!(
                     "DHT ops: {}\n\n",
                     serde_json::to_string_pretty(
@@ -135,7 +175,7 @@ pub async fn start_explorer(
                     )?
                 );
 
-                let out = get_all_actions(&mut dht);
+                let out = get_all_actions(dht);
                 println!(
                     "DHT actions: {}",
                     out.into_iter()
@@ -144,7 +184,7 @@ pub async fn start_explorer(
                         .as_human_readable_summary_pretty()?
                 );
 
-                let out = get_all_dht_ops(&mut cache);
+                let out = get_all_dht_ops(cache);
                 println!(
                     "Cache ops: {}\n\n",
                     out.into_iter()
@@ -153,7 +193,7 @@ pub async fn start_explorer(
                         .as_human_readable_pretty()?
                 );
 
-                let out = get_all_actions(&mut cache);
+                let out = get_all_actions(cache);
                 println!(
                     "Cache actions: {}",
                     out.into_iter()
@@ -162,25 +202,19 @@ pub async fn start_explorer(
                         .as_human_readable_summary_pretty()?
                 );
             }
+            Operation::Back => {
+                return Ok(false);
+            }
             Operation::Exit => {
-                println!("Thank you for exploring! Exiting...");
-                break;
+                return Ok(true);
             }
         }
     }
-
-    Ok(())
 }
 
-pub fn select_app(apps: &[AppInfo]) -> anyhow::Result<&AppInfo> {
+fn select_app(apps: &[AppInfo]) -> anyhow::Result<Option<&AppInfo>> {
     if apps.is_empty() {
         anyhow::bail!("No apps found");
-    } else if apps.len() == 1 {
-        println!(
-            "Selecting the only installed app: {}",
-            apps[0].installed_app_id
-        );
-        return Ok(&apps[0]);
     }
 
     let selected = dialoguer::Select::new()
@@ -192,12 +226,17 @@ pub fn select_app(apps: &[AppInfo]) -> anyhow::Result<&AppInfo> {
                 .map(|a| a.installed_app_id.clone())
                 .collect::<Vec<_>>(),
         )
+        .item(":exit")
         .interact()?;
 
-    Ok(&apps[selected])
+    if selected == apps.len() {
+        return Ok(None);
+    }
+
+    Ok(Some(&apps[selected]))
 }
 
-pub fn select_dna(app: &AppInfo) -> anyhow::Result<&DnaHash> {
+fn select_dna(app: &AppInfo) -> anyhow::Result<Option<&DnaHash>> {
     let dna_hashes = app
         .cell_info
         .values()
@@ -219,10 +258,8 @@ pub fn select_dna(app: &AppInfo) -> anyhow::Result<&DnaHash> {
         .collect::<Vec<_>>();
 
     if dna_hashes.is_empty() {
-        anyhow::bail!("No DNAs found");
-    } else if dna_hashes.len() == 1 {
-        println!("Selecting the only DNA: {:?}", dna_hashes[0].2);
-        return Ok(dna_hashes[0].2);
+        eprintln!("No DNAs found");
+        return Ok(None);
     }
 
     let selected = dialoguer::Select::new()
@@ -231,10 +268,15 @@ pub fn select_dna(app: &AppInfo) -> anyhow::Result<&DnaHash> {
         .items(
             &dna_hashes
                 .iter()
-                .map(|d| format!("{} ({:?}) {:?}", d.0, d.1, d.2))
+                .map(|d| format!("{} ({:?}): {:?}", d.0, d.1, d.2))
                 .collect::<Vec<_>>(),
         )
+        .item(":back")
         .interact()?;
 
-    Ok(dna_hashes[selected].2)
+    if selected == dna_hashes.len() {
+        return Ok(None);
+    }
+
+    Ok(Some(dna_hashes[selected].2))
 }
