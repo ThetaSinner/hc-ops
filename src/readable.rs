@@ -1,4 +1,4 @@
-use crate::retrieve::{ChainRecord, DhtOp};
+use crate::retrieve::{ChainRecord, DhtOp, Record};
 use crate::{HcOpsError, HcOpsResult};
 use holochain_conductor_api::AppInfo;
 use holochain_zome_types::prelude::{
@@ -419,6 +419,48 @@ impl HumanReadable for ChainRecord {
 
     fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
         self.as_human_readable_raw()
+    }
+}
+
+impl HumanReadable for Record {
+    fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
+        let mut out = serde_json::Map::new();
+
+        out.insert("dht_op".to_string(), self.dht_op.as_human_readable_raw()?);
+        out.insert("action".to_string(), self.action.as_human_readable_raw()?);
+        out.insert(
+            "entry".to_string(),
+            self.entry
+                .as_ref()
+                .map(|e| e.as_human_readable_raw())
+                .transpose()?
+                .unwrap_or_else(|| serde_json::Value::Null),
+        );
+
+        Ok(serde_json::Value::Object(out))
+    }
+
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
+        let mut out = serde_json::Map::new();
+
+        out.insert(
+            "dht_op".to_string(),
+            self.dht_op.as_human_readable_summary_raw()?,
+        );
+        out.insert(
+            "action".to_string(),
+            self.action.as_human_readable_summary_raw()?,
+        );
+        out.insert(
+            "entry".to_string(),
+            self.entry
+                .as_ref()
+                .map(|e| e.as_human_readable_summary_raw())
+                .transpose()?
+                .unwrap_or_else(|| serde_json::Value::Null),
+        );
+
+        Ok(serde_json::Value::Object(out))
     }
 }
 

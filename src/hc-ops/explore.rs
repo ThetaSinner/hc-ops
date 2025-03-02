@@ -4,7 +4,7 @@ use hc_ops::HcOpsResult;
 use hc_ops::readable::{HumanReadable, HumanReadableDisplay};
 use hc_ops::retrieve::{
     AuthoredMeta, CacheMeta, DbKind, DhtMeta, DhtOp, get_agent_chain, get_all_actions,
-    get_all_dht_ops, get_all_entries, list_discovered_agents, load_database_key,
+    get_all_dht_ops, get_all_entries, get_pending_ops, list_discovered_agents, load_database_key,
     open_holochain_database,
 };
 use holochain_conductor_api::{AppInfo, CellInfo};
@@ -80,6 +80,7 @@ fn run_explorer(
     enum Operation {
         WhoIsHere,
         AgentChain,
+        Pending,
         Dump,
         Back,
         Exit,
@@ -90,6 +91,7 @@ fn run_explorer(
             match self {
                 Operation::WhoIsHere => write!(f, "Who is here?"),
                 Operation::AgentChain => write!(f, "View an agent chain"),
+                Operation::Pending => write!(f, "View ops pending validation or integration"),
                 Operation::Dump => write!(f, "Dump"),
                 Operation::Back => write!(f, "Back"),
                 Operation::Exit => write!(f, "Exit"),
@@ -100,6 +102,7 @@ fn run_explorer(
     let operations = vec![
         Operation::WhoIsHere,
         Operation::AgentChain,
+        Operation::Pending,
         Operation::Dump,
         Operation::Back,
         Operation::Exit,
@@ -132,6 +135,20 @@ fn run_explorer(
                 let chain = get_agent_chain(dht, cache, &key)?;
 
                 println!("Agent chain: {}", chain.as_human_readable_pretty()?);
+            }
+            Operation::Pending => {
+                let pending = get_pending_ops(dht)?;
+
+                if pending.is_empty() {
+                    println!("No pending ops");
+                } else {
+                    println!(
+                        "Pending ops: {}",
+                        pending
+                            .as_human_readable_pretty()
+                            .context("Could not convert pending ops")?
+                    );
+                }
             }
             Operation::Dump => {
                 let out = get_all_dht_ops(authored);

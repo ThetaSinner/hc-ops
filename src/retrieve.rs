@@ -251,6 +251,57 @@ impl TryFrom<(DbAction, ValidationStatus, Option<Vec<u8>>)> for ChainRecord {
     }
 }
 
+pub struct Record {
+    pub dht_op: DhtOp<DhtMeta>,
+    pub action: SignedActionHashed,
+    pub entry: Option<Entry>,
+}
+
+pub fn get_pending_ops(dht: &mut SqliteConnection) -> HcOpsResult<Vec<Record>> {
+    use diesel::prelude::*;
+    use schema::Action::dsl as action_fields;
+    use schema::DhtOp::dsl as dht_op_fields;
+    use schema::Entry::dsl as entry_fields;
+
+    let loaded = schema::DhtOp::table
+        .inner_join(schema::Action::table)
+        .left_join(
+            schema::Entry::table.on(action_fields::entry_hash
+                .assume_not_null()
+                .eq(entry_fields::hash)),
+        )
+        .filter(dht_op_fields::when_integrated.is_null())
+        .select((
+            DbDhtOp::as_select(),
+            action_fields::blob,
+            entry_fields::blob.nullable(),
+        ))
+        .load::<(DbDhtOp, Vec<u8>, Option<Vec<u8>>)>(dht)?;
+
+    loaded
+        .into_iter()
+        .map(TryInto::try_into)
+        .collect::<HcOpsResult<Vec<_>>>()
+}
+
+impl TryFrom<(DbDhtOp, Vec<u8>, Option<Vec<u8>>)> for Record {
+    type Error = HcOpsError;
+
+    fn try_from(
+        (dht_op, action_blob, maybe_entry_blob): (DbDhtOp, Vec<u8>, Option<Vec<u8>>),
+    ) -> HcOpsResult<Self> {
+        Ok(Record {
+            dht_op: dht_op.try_into()?,
+            action: SignedActionHashed::from_content_sync(holochain_serialized_bytes::decode(
+                &action_blob,
+            )?),
+            entry: maybe_entry_blob
+                .map(|e| -> HcOpsResult<Entry> { Ok(holochain_serialized_bytes::decode(&e)?) })
+                .transpose()?,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
