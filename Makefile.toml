@@ -1,0 +1,33 @@
+[tasks.format]
+command = "cargo"
+args = ["fmt", "--", "--check"]
+
+[tasks.clippy]
+command = "cargo"
+args = ["clippy", "--all-targets", "--", "--deny=warnings"]
+
+[tasks.test]
+command = "cargo"
+args = ["test", "--no-fail-fast"]
+
+[tasks.each-feature]
+install_crate = "cargo-hack"
+command = "cargo"
+args = ["hack", "check", "--each-feature", "--no-dev-deps"]
+
+[tasks.all-features]
+install_crate = "cargo-hack"
+command = "cargo"
+args = ["hack", "check", "--feature-powerset", "--no-dev-deps"]
+
+[tasks.verify]
+dependencies = [
+    "format",
+    "clippy",
+    "test",
+    "each-feature",
+    "all-features",
+]
+
+[tasks.default]
+alias = "verify"
