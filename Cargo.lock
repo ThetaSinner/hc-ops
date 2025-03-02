@@ -1861,6 +1861,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fixture_types"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "flate2"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2292,10 +2299,12 @@ dependencies = [
  "dialoguer",
  "diesel",
  "diesel_migrations",
+ "fixture_types",
  "futures",
  "holochain",
  "holochain_client",
  "holochain_conductor_api",
+ "holochain_serialized_bytes",
  "holochain_types",
  "holochain_websocket",
  "holochain_zome_types",
@@ -2305,6 +2314,7 @@ dependencies = [
  "libsqlite3-sys",
  "proc-ctl",
  "rpassword",
+ "serde",
  "serde_json",
  "sodoken 0.0.904-alpha",
  "tabled",

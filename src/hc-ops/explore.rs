@@ -1,8 +1,13 @@
 use anyhow::{Context, bail};
 use diesel::SqliteConnection;
-use hc_ops::retrieve::{DbKind, get_some, load_database_key, open_holochain_database};
+use hc_ops::HcOpsResult;
+use hc_ops::readable::HumanReadable;
+use hc_ops::retrieve::{
+    AuthoredMeta, CacheMeta, DbKind, DhtMeta, DhtOp, get_all_actions, get_all_dht_ops,
+    get_all_entries, load_database_key, open_holochain_database,
+};
 use holochain_conductor_api::{AppInfo, CellInfo};
-use holochain_zome_types::prelude::DnaHash;
+use holochain_zome_types::prelude::{DnaHash, Entry, SignedAction};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 
@@ -22,10 +27,17 @@ pub async fn start_explorer(
 
     let use_dna = select_dna(use_app)?;
 
-    let use_db_kind = select_db_kind()?;
-
-    let mut database = open_holochain_database(data_root_path, &use_db_kind, use_dna, key.as_mut())
-        .context("Failed to open the selected database")?;
+    let mut authored = open_holochain_database(
+        data_root_path,
+        &DbKind::Authored(use_app.agent_pub_key.clone()),
+        use_dna,
+        key.as_mut(),
+    )
+    .context("Failed to open the authored database")?;
+    let mut dht = open_holochain_database(data_root_path, &DbKind::Dht, use_dna, key.as_mut())
+        .context("Failed to open the DHT database")?;
+    let mut cache = open_holochain_database(data_root_path, &DbKind::Cache, use_dna, key.as_mut())
+        .context("Failed to open the cache database")?;
 
     enum Operation {
         Dump,
@@ -51,8 +63,82 @@ pub async fn start_explorer(
 
         match operations[selected] {
             Operation::Dump => {
-                let out = get_some(&mut database);
-                println!("{:?}", out);
+                let out = get_all_dht_ops(&mut authored);
+                println!(
+                    "Authored ops: {}\n\n",
+                    serde_json::to_string_pretty(
+                        &out.into_iter()
+                            .map(TryInto::try_into)
+                            .collect::<HcOpsResult<Vec<DhtOp<AuthoredMeta>>>>()?
+                            .as_human_readable_raw()?
+                    )?
+                );
+
+                let out = get_all_actions(&mut authored);
+                println!(
+                    "Authored actions: {}",
+                    serde_json::to_string_pretty(&serde_json::from_str::<serde_json::Value>(
+                        &out.into_iter()
+                            .map(TryInto::try_into)
+                            .collect::<HcOpsResult<Vec<SignedAction>>>()?
+                            .as_human_readable_summary()?
+                    )?)?
+                );
+
+                let out = get_all_entries(&mut authored);
+                println!(
+                    "Authored entries: {}",
+                    serde_json::to_string_pretty(&serde_json::from_str::<serde_json::Value>(
+                        &out.into_iter()
+                            .map(TryInto::try_into)
+                            .collect::<HcOpsResult<Vec<Entry>>>()?
+                            .as_human_readable_summary()?
+                    )?)?
+                );
+
+                let out = get_all_dht_ops(&mut dht);
+                println!(
+                    "DHT ops: {}\n\n",
+                    serde_json::to_string_pretty(
+                        &out.into_iter()
+                            .map(TryInto::try_into)
+                            .collect::<HcOpsResult<Vec<DhtOp<DhtMeta>>>>()?
+                            .as_human_readable_raw()?
+                    )?
+                );
+
+                let out = get_all_actions(&mut dht);
+                println!(
+                    "DHT actions: {}",
+                    serde_json::to_string_pretty(&serde_json::from_str::<serde_json::Value>(
+                        &out.into_iter()
+                            .map(TryInto::try_into)
+                            .collect::<HcOpsResult<Vec<SignedAction>>>()?
+                            .as_human_readable_summary()?
+                    )?)?
+                );
+
+                let out = get_all_dht_ops(&mut cache);
+                println!(
+                    "Cache ops: {}\n\n",
+                    serde_json::to_string_pretty(
+                        &out.into_iter()
+                            .map(TryInto::try_into)
+                            .collect::<HcOpsResult<Vec<DhtOp<CacheMeta>>>>()?
+                            .as_human_readable_raw()?
+                    )?
+                );
+
+                let out = get_all_actions(&mut cache);
+                println!(
+                    "Cache actions: {}",
+                    serde_json::to_string_pretty(&serde_json::from_str::<serde_json::Value>(
+                        &out.into_iter()
+                            .map(TryInto::try_into)
+                            .collect::<HcOpsResult<Vec<SignedAction>>>()?
+                            .as_human_readable_summary()?
+                    )?)?
+                );
             }
             Operation::Exit => {
                 println!("Thank you for exploring! Exiting...");
@@ -129,18 +215,4 @@ pub fn select_dna(app: &AppInfo) -> anyhow::Result<&DnaHash> {
         .interact()?;
 
     Ok(dna_hashes[selected].2)
-}
-
-pub fn select_db_kind() -> anyhow::Result<DbKind> {
-    let selected = dialoguer::Select::new()
-        .with_prompt("Select a database kind")
-        .default(0)
-        .items(&["DHT", "Cache"])
-        .interact()?;
-
-    Ok(match selected {
-        0 => DbKind::Dht,
-        1 => DbKind::Cache,
-        _ => unreachable!(),
-    })
 }

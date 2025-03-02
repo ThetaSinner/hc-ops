@@ -212,6 +212,7 @@ name = "fixture"
 version = "0.1.0"
 dependencies = [
  "fixture_integrity",
+ "fixture_types",
  "hdk",
 ]
 
@@ -220,6 +221,13 @@ name = "fixture_integrity"
 version = "0.1.0"
 dependencies = [
  "hdi",
+ "serde",
+]
+
+[[package]]
+name = "fixture_types"
+version = "0.1.0"
+dependencies = [
  "serde",
 ]
 

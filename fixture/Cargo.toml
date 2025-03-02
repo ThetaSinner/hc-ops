@@ -1,7 +1,8 @@
 [workspace]
 members = [
     "fixture",
-    "fixture_integrity"
+    "fixture_integrity",
+    "fixture_types"
 ]
 
 resolver = "3"
@@ -16,3 +17,4 @@ hdk = "=0.4.1"
 serde = "1"
 
 fixture_integrity = { path = "fixture_integrity" }
+fixture_types = { path = "fixture_types" }

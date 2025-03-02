@@ -9,4 +9,6 @@ name = "fixture"
 
 [dependencies]
 hdk = { workspace = true }
+
 fixture_integrity = { workspace = true }
+fixture_types = { workspace = true }

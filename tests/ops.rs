@@ -64,7 +64,9 @@ async fn check_app_init() {
             cell_id.clone(),
             "fixture",
             "create",
-            (),
+            fixture_types::CreateTester {
+                name: "Brandy".to_string(),
+            },
         )
         .await
         .unwrap();

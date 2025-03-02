@@ -18,6 +18,12 @@ pub enum HcOpsError {
     #[error("JSON error: {0}")]
     JSON(#[from] serde_json::Error),
 
+    #[error("HoloHash error: {0}")]
+    HoloHash(#[from] holochain_zome_types::prelude::HoloHashError),
+
+    #[error("Serialized bytes error: {0}")]
+    SerializedBytes(#[from] holochain_serialized_bytes::SerializedBytesError),
+
     #[error("Other error: {0}")]
     Other(#[from] Box<dyn std::error::Error + Send + Sync>),
 
