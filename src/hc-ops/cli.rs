@@ -4,6 +4,7 @@ pub(crate) mod tag;
 
 use clap::{Args, Parser, Subcommand};
 use std::net::IpAddr;
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -73,10 +74,34 @@ pub struct AdminArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum AdminCommands {
+    /// List installed apps
     ListApps {
         /// Get full output, rather than the default summary
         #[arg(long)]
         full: bool,
+    },
+    /// Install and enable an app
+    #[command(arg_required_else_help = true)]
+    InstallApp {
+        /// The path to a .happ file to install
+        path: PathBuf,
+
+        /// Set a network seed for the app
+        network_seed: Option<String>,
+
+        /// Override the app id that the app will be installed under
+        app_id: Option<String>,
+    },
+    /// Uninstall an app
+    #[command(arg_required_else_help = true)]
+    UninstallApp {
+        /// The app id to uninstall
+        app_id: String,
+    },
+    /// Get storage info for apps
+    StorageInfo {
+        /// Get storage info for a single app
+        app_id: Option<String>,
     },
 }
 

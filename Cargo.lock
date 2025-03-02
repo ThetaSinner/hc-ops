@@ -2296,8 +2296,10 @@ dependencies = [
  "holochain",
  "holochain_client",
  "holochain_conductor_api",
+ "holochain_types",
  "holochain_websocket",
  "holochain_zome_types",
+ "human_bytes",
  "libc",
  "libsodium-sys-stable",
  "libsqlite3-sys",
@@ -3336,6 +3338,12 @@ dependencies = [
  "toml",
  "uuid 1.15.1",
 ]
+
+[[package]]
+name = "human_bytes"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91f255a4535024abf7640cb288260811fc14794f62b063652ed349f9a6c2348e"
 
 [[package]]
 name = "hyper"

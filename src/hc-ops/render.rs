@@ -1,3 +1,4 @@
+use holochain_conductor_api::{StorageBlob, StorageInfo};
 use holochain_zome_types::prelude::DnaHash;
 use std::io;
 use std::io::Write;
@@ -34,5 +35,43 @@ where
                 .as_bytes(),
         )?;
         flush(write)
+    }
+}
+
+#[derive(Tabled)]
+pub struct StorageInfoBlob {
+    pub referenced_by_apps: String,
+    // TODO Holochain API does not return which DNA is which!
+    pub dna: String,
+    pub authored: String,
+    pub authored_on_disk: String,
+    pub dht: String,
+    pub dht_on_disk: String,
+    pub cache: String,
+    pub cache_on_disk: String,
+}
+
+impl Render for StorageInfo {
+    fn render(&self, write: impl Write) -> io::Result<()> {
+        let t = self
+            .blobs
+            .iter()
+            .map(|b| match b {
+                StorageBlob::Dna(dna) => StorageInfoBlob {
+                    referenced_by_apps: dna.used_by.join(", "),
+                    dna: "unknown".to_string(),
+                    authored: human_bytes::human_bytes(dna.authored_data_size as f64),
+                    authored_on_disk: human_bytes::human_bytes(
+                        dna.authored_data_size_on_disk as f64,
+                    ),
+                    dht: human_bytes::human_bytes(dna.dht_data_size as f64),
+                    dht_on_disk: human_bytes::human_bytes(dna.dht_data_size_on_disk as f64),
+                    cache: human_bytes::human_bytes(dna.cache_data_size as f64),
+                    cache_on_disk: human_bytes::human_bytes(dna.cache_data_size_on_disk as f64),
+                },
+            })
+            .collect::<Vec<_>>();
+
+        t.render(write)
     }
 }
