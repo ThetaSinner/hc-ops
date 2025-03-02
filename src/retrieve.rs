@@ -1,5 +1,7 @@
 mod crypt;
+
 pub use crypt::*;
+use std::collections::HashSet;
 
 mod model;
 pub use model::*;
@@ -68,4 +70,55 @@ pub fn get_all_actions(conn: &mut SqliteConnection) -> Vec<DbAction> {
 
 pub fn get_all_entries(conn: &mut SqliteConnection) -> Vec<DbEntry> {
     schema::Entry::table.load(conn).unwrap()
+}
+
+/// Check the DHT and cache databases for `AgentValidationPkg` actions.
+pub fn list_discovered_agents(
+    dht_conn: &mut SqliteConnection,
+    cache_conn: &mut SqliteConnection,
+) -> HcOpsResult<Vec<AgentPubKey>> {
+    let mut loaded = list_dht_agent_keys(dht_conn)?
+        .into_iter()
+        .collect::<HashSet<_>>();
+    let cache_loaded = list_cache_agent_keys(cache_conn)?
+        .into_iter()
+        .collect::<HashSet<_>>();
+
+    loaded.extend(cache_loaded);
+
+    let mut out = Vec::with_capacity(loaded.len());
+    for v in loaded {
+        out.push(AgentPubKey::from_raw_39(v)?);
+    }
+
+    Ok(out)
+}
+
+fn list_dht_agent_keys(conn: &mut SqliteConnection) -> HcOpsResult<Vec<Vec<u8>>> {
+    use diesel::prelude::*;
+    use schema::Action::dsl as action_fields;
+    use schema::DhtOp::dsl as dht_op_fields;
+
+    let loaded = schema::Action::table
+        .select(action_fields::author)
+        .distinct()
+        .inner_join(schema::DhtOp::table)
+        .filter(action_fields::typ.eq("AgentValidationPkg"))
+        .filter(dht_op_fields::validation_status.eq(ValidationStatus::Valid))
+        .load::<Vec<u8>>(conn)?;
+
+    Ok(loaded)
+}
+
+fn list_cache_agent_keys(conn: &mut SqliteConnection) -> HcOpsResult<Vec<Vec<u8>>> {
+    use diesel::prelude::*;
+    use schema::Action::dsl as action_fields;
+
+    let loaded = schema::Action::table
+        .select(action_fields::author)
+        .distinct()
+        .filter(action_fields::typ.eq("AgentValidationPkg"))
+        .load::<Vec<u8>>(conn)?;
+
+    Ok(loaded)
 }

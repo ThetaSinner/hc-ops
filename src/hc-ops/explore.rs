@@ -4,7 +4,7 @@ use hc_ops::HcOpsResult;
 use hc_ops::readable::HumanReadable;
 use hc_ops::retrieve::{
     AuthoredMeta, CacheMeta, DbKind, DhtMeta, DhtOp, get_all_actions, get_all_dht_ops,
-    get_all_entries, load_database_key, open_holochain_database,
+    get_all_entries, list_discovered_agents, load_database_key, open_holochain_database,
 };
 use holochain_conductor_api::{AppInfo, CellInfo};
 use holochain_zome_types::prelude::{DnaHash, Entry, SignedAction};
@@ -40,6 +40,7 @@ pub async fn start_explorer(
         .context("Failed to open the cache database")?;
 
     enum Operation {
+        WhoIsHere,
         Dump,
         Exit,
     }
@@ -47,13 +48,14 @@ pub async fn start_explorer(
     impl Display for Operation {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             match self {
+                Operation::WhoIsHere => write!(f, "Who is here?"),
                 Operation::Dump => write!(f, "Dump"),
                 Operation::Exit => write!(f, "Exit"),
             }
         }
     }
 
-    let operations = vec![Operation::Dump, Operation::Exit];
+    let operations = vec![Operation::WhoIsHere, Operation::Dump, Operation::Exit];
     loop {
         let selected = dialoguer::Select::new()
             .with_prompt("Select an operation")
@@ -62,6 +64,14 @@ pub async fn start_explorer(
             .interact()?;
 
         match operations[selected] {
+            Operation::WhoIsHere => {
+                let discovered = list_discovered_agents(&mut dht, &mut cache)?;
+
+                println!(
+                    "Discovered agents: {}",
+                    serde_json::to_string_pretty(&discovered.as_human_readable_raw()?)?
+                );
+            }
             Operation::Dump => {
                 let out = get_all_dht_ops(&mut authored);
                 println!(

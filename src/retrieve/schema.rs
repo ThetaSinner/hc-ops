@@ -1,5 +1,7 @@
 #![allow(non_snake_case)]
 
+use diesel::{allow_tables_to_appear_in_same_query, joinable};
+
 diesel::table! {
     DhtOp (hash) {
         hash -> Blob,
@@ -62,3 +64,6 @@ diesel::table! {
         prev_dna_hash -> Nullable<Blob>,
     }
 }
+
+joinable!(DhtOp -> Action (action_hash));
+allow_tables_to_appear_in_same_query!(Action, DhtOp);

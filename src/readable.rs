@@ -299,6 +299,20 @@ impl HumanReadable for Entry {
     }
 }
 
+impl HumanReadable for AgentPubKey {
+    fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
+        Ok(serde_json::Value::String(format!("{:?}", self)))
+    }
+
+    fn as_human_readable(&self) -> HcOpsResult<String> {
+        Ok(serde_json::to_string(&self.as_human_readable_raw()?)?)
+    }
+
+    fn as_human_readable_summary(&self) -> HcOpsResult<String> {
+        self.as_human_readable()
+    }
+}
+
 fn convert_byte_array(from: &[serde_json::Value]) -> HcOpsResult<Vec<u8>> {
     from.iter()
         .map(|v| {

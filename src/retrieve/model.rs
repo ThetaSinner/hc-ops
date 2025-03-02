@@ -2,6 +2,7 @@ use crate::{HcOpsError, HcOpsResult};
 use diesel::backend::Backend;
 use diesel::deserialize::FromSql;
 use diesel::prelude::*;
+use diesel::serialize::{Output, ToSql};
 use diesel::sql_types::{SmallInt, Text};
 use diesel::{AsExpression, FromSqlRow};
 use holochain_zome_types::Entry;
@@ -132,6 +133,19 @@ where
             2 => ValidationStatus::Abandoned,
             status => return Err(format!("Unknown ValidationStatus: {status}").into()),
         })
+    }
+}
+
+impl<DB: Backend> ToSql<SmallInt, DB> for ValidationStatus
+where
+    i16: ToSql<SmallInt, DB>,
+{
+    fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, DB>) -> diesel::serialize::Result {
+        match self {
+            ValidationStatus::Valid => 0i16.to_sql(out),
+            ValidationStatus::Rejected => 1i16.to_sql(out),
+            ValidationStatus::Abandoned => 2i16.to_sql(out),
+        }
     }
 }
 
