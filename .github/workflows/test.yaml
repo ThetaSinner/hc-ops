@@ -1,0 +1,19 @@
+name: "Test"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-make@0.37.24
+      - name: Verify
+        run: cargo make verify
