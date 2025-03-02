@@ -1,9 +1,9 @@
-use crate::retrieve::DhtOp;
+use crate::retrieve::{ChainRecord, DhtOp};
 use crate::{HcOpsError, HcOpsResult};
 use holochain_conductor_api::AppInfo;
 use holochain_zome_types::prelude::{
-    ActionHash, AgentPubKey, AnyDhtHash, DhtOpHash, DnaHash, Entry, EntryHash, SignedAction,
-    Timestamp,
+    Action, ActionHash, AgentPubKey, AnyDhtHash, DhtOpHash, DnaHash, Entry, EntryHash,
+    SignedAction, SignedActionHashed, Timestamp,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -12,9 +12,31 @@ use std::fmt::Debug;
 pub trait HumanReadable {
     fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value>;
 
-    fn as_human_readable(&self) -> HcOpsResult<String>;
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value>;
+}
 
-    fn as_human_readable_summary(&self) -> HcOpsResult<String>;
+pub trait HumanReadableDisplay: HumanReadable {
+    fn as_human_readable(&self) -> HcOpsResult<String> {
+        Ok(serde_json::to_string(&self.as_human_readable_raw()?)?)
+    }
+
+    fn as_human_readable_pretty(&self) -> HcOpsResult<String> {
+        Ok(serde_json::to_string_pretty(
+            &self.as_human_readable_raw()?,
+        )?)
+    }
+
+    fn as_human_readable_summary(&self) -> HcOpsResult<String> {
+        Ok(serde_json::to_string(
+            &self.as_human_readable_summary_raw()?,
+        )?)
+    }
+
+    fn as_human_readable_summary_pretty(&self) -> HcOpsResult<String> {
+        Ok(serde_json::to_string_pretty(
+            &self.as_human_readable_summary_raw()?,
+        )?)
+    }
 }
 
 impl<T> HumanReadable for Vec<T>
@@ -30,17 +52,59 @@ where
         Ok(serde_json::Value::Array(out))
     }
 
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
+        let out = self
+            .iter()
+            .map(|item| item.as_human_readable_summary_raw())
+            .collect::<HcOpsResult<Vec<_>>>()?;
+
+        Ok(serde_json::Value::Array(out))
+    }
+}
+
+impl<T: HumanReadable> HumanReadableDisplay for Vec<T> {
     fn as_human_readable(&self) -> HcOpsResult<String> {
-        Ok(serde_json::to_string(&self.as_human_readable_raw()?)?)
+        let mut out = Vec::with_capacity(self.len());
+
+        for item in self {
+            out.push(item.as_human_readable_raw()?);
+        }
+
+        Ok(serde_json::to_string(&serde_json::Value::Array(out))?)
+    }
+
+    fn as_human_readable_pretty(&self) -> HcOpsResult<String> {
+        let mut out = Vec::with_capacity(self.len());
+
+        for item in self {
+            out.push(item.as_human_readable_raw()?);
+        }
+
+        Ok(serde_json::to_string_pretty(&serde_json::Value::Array(
+            out,
+        ))?)
     }
 
     fn as_human_readable_summary(&self) -> HcOpsResult<String> {
-        let mut vec = Vec::<serde_json::Value>::with_capacity(self.len());
+        let mut out = Vec::with_capacity(self.len());
+
         for item in self {
-            vec.push(serde_json::from_str(&item.as_human_readable_summary()?)?);
+            out.push(item.as_human_readable_summary_raw()?);
         }
 
-        Ok(serde_json::to_string(&vec)?)
+        Ok(serde_json::to_string(&serde_json::Value::Array(out))?)
+    }
+
+    fn as_human_readable_summary_pretty(&self) -> HcOpsResult<String> {
+        let mut out = Vec::with_capacity(self.len());
+
+        for item in self {
+            out.push(item.as_human_readable_summary_raw()?);
+        }
+
+        Ok(serde_json::to_string_pretty(&serde_json::Value::Array(
+            out,
+        ))?)
     }
 }
 
@@ -70,17 +134,12 @@ impl HumanReadable for AppInfo {
         Ok(app_info)
     }
 
-    fn as_human_readable(&self) -> HcOpsResult<String> {
-        let app_info = self.as_human_readable_raw()?;
-        Ok(serde_json::to_string(&app_info)?)
-    }
-
-    fn as_human_readable_summary(&self) -> HcOpsResult<String> {
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
         let mut app_info = self.as_human_readable_raw()?;
 
         app_info.as_object_mut().unwrap().remove("manifest");
 
-        Ok(serde_json::to_string(&app_info)?)
+        Ok(app_info)
     }
 }
 
@@ -102,109 +161,119 @@ impl<S: Debug + Serialize + DeserializeOwned> HumanReadable for DhtOp<S> {
         Ok(dht_op)
     }
 
-    fn as_human_readable(&self) -> HcOpsResult<String> {
-        let app_info = self.as_human_readable_raw()?;
-        Ok(serde_json::to_string(&app_info)?)
-    }
-
-    fn as_human_readable_summary(&self) -> HcOpsResult<String> {
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
         let mut dht_op = self.as_human_readable_raw()?;
 
         dht_op.as_object_mut().unwrap().remove("meta");
 
-        Ok(serde_json::to_string(&dht_op)?)
+        Ok(dht_op)
     }
 }
 
-impl HumanReadable for SignedAction {
+impl HumanReadable for Action {
     #[allow(clippy::collapsible_if)]
     fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
-        let mut out: serde_json::Value = serde_json::from_str(&serde_json::to_string(&self)?)?;
+        let mut action: serde_json::Value = serde_json::from_str(&serde_json::to_string(&self)?)?;
 
-        if let Some(data) = out.get_mut("data").and_then(|v| v.as_object_mut()) {
-            if data.contains_key("author") {
-                data["author"] = transform_agent_pub_key(&data["author"])?;
+        if let Some(action) = action.as_object_mut() {
+            if action.contains_key("author") {
+                action["author"] = transform_agent_pub_key(&action["author"])?;
             }
 
-            if data.contains_key("timestamp") {
-                data["timestamp"] = transform_timestamp(&data["timestamp"])?;
+            if action.contains_key("timestamp") {
+                action["timestamp"] = transform_timestamp(&action["timestamp"])?;
             }
 
-            if data.contains_key("prev_action") {
-                data["prev_action"] = transform_action_hash(&data["prev_action"])?;
+            if action.contains_key("prev_action") {
+                action["prev_action"] = transform_action_hash(&action["prev_action"])?;
             }
 
-            if data.contains_key("entry_hash") {
-                data["entry_hash"] = transform_entry_hash(&data["entry_hash"])?;
+            if action.contains_key("entry_hash") {
+                action["entry_hash"] = transform_entry_hash(&action["entry_hash"])?;
             }
 
-            if data.contains_key("type") {
-                if data["type"] == "Dna" {
-                    if data.contains_key("hash") {
-                        data["hash"] = transform_dna_hash(&data["hash"])?;
+            if action.contains_key("type") {
+                if action["type"] == "Dna" {
+                    if action.contains_key("hash") {
+                        action["hash"] = transform_dna_hash(&action["hash"])?;
                     }
                 }
 
-                if data["type"] == "CreateLink" {
-                    if data.contains_key("base_address") {
-                        data["base_address"] = transform_any_linkable_hash(&data["base_address"])?;
+                if action["type"] == "CreateLink" {
+                    if action.contains_key("base_address") {
+                        action["base_address"] =
+                            transform_any_linkable_hash(&action["base_address"])?;
                     }
 
-                    if data.contains_key("target_address") {
-                        data["target_address"] =
-                            transform_any_linkable_hash(&data["target_address"])?;
+                    if action.contains_key("target_address") {
+                        action["target_address"] =
+                            transform_any_linkable_hash(&action["target_address"])?;
                     }
 
-                    if data.contains_key("tag") {
-                        data["tag"] = transform_flatten_byte_array(&data["tag"])?;
-                    }
-                }
-
-                if data["type"] == "DeleteLink" {
-                    if data.contains_key("base_address") {
-                        data["base_address"] = transform_any_linkable_hash(&data["base_address"])?;
-                    }
-
-                    if data.contains_key("link_add_address") {
-                        data["link_add_address"] =
-                            transform_action_hash(&data["link_add_address"])?;
+                    if action.contains_key("tag") {
+                        action["tag"] = transform_flatten_byte_array(&action["tag"])?;
                     }
                 }
 
-                if data["type"] == "Update" {
-                    if data.contains_key("original_action_address") {
-                        data["original_action_address"] =
-                            transform_action_hash(&data["original_action_address"])?;
+                if action["type"] == "DeleteLink" {
+                    if action.contains_key("base_address") {
+                        action["base_address"] =
+                            transform_any_linkable_hash(&action["base_address"])?;
                     }
 
-                    if data.contains_key("original_entry_address") {
-                        data["original_entry_address"] =
-                            transform_entry_hash(&data["original_entry_address"])?;
+                    if action.contains_key("link_add_address") {
+                        action["link_add_address"] =
+                            transform_action_hash(&action["link_add_address"])?;
                     }
                 }
 
-                if data["type"] == "Delete" {
-                    if data.contains_key("deletes_address") {
-                        data["deletes_address"] = transform_action_hash(&data["deletes_address"])?;
+                if action["type"] == "Update" {
+                    if action.contains_key("original_action_address") {
+                        action["original_action_address"] =
+                            transform_action_hash(&action["original_action_address"])?;
                     }
 
-                    if data.contains_key("deletes_entry_address") {
-                        data["deletes_entry_address"] =
-                            transform_entry_hash(&data["deletes_entry_address"])?;
+                    if action.contains_key("original_entry_address") {
+                        action["original_entry_address"] =
+                            transform_entry_hash(&action["original_entry_address"])?;
+                    }
+                }
+
+                if action["type"] == "Delete" {
+                    if action.contains_key("deletes_address") {
+                        action["deletes_address"] =
+                            transform_action_hash(&action["deletes_address"])?;
+                    }
+
+                    if action.contains_key("deletes_entry_address") {
+                        action["deletes_entry_address"] =
+                            transform_entry_hash(&action["deletes_entry_address"])?;
                     }
                 }
             }
         }
 
-        Ok(out)
+        Ok(action)
     }
 
-    fn as_human_readable(&self) -> HcOpsResult<String> {
-        let signed_action = self.as_human_readable_raw()?;
-        Ok(serde_json::to_string(&signed_action)?)
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
+        self.as_human_readable_raw()
+    }
+}
+
+impl HumanReadable for SignedAction {
+    fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
+        let mut out = serde_json::Map::new();
+
+        out.insert("data".to_string(), self.action().as_human_readable_raw()?);
+
+        let sig = serde_json::from_str(&serde_json::to_string(&self.signature())?)?;
+        out.insert("signature".to_string(), transform_flatten_byte_array(&sig)?);
+
+        Ok(serde_json::Value::Object(out))
     }
 
-    fn as_human_readable_summary(&self) -> HcOpsResult<String> {
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
         let mut signed_action = self.as_human_readable_raw()?;
 
         let action = signed_action
@@ -218,7 +287,32 @@ impl HumanReadable for SignedAction {
             }
         }
 
-        Ok(serde_json::to_string(action)?)
+        signed_action
+            .as_object_mut()
+            .and_then(|v| v.remove("signature"));
+
+        Ok(signed_action)
+    }
+}
+
+impl HumanReadable for SignedActionHashed {
+    fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
+        let mut out = serde_json::Map::new();
+
+        out.insert(
+            "content".to_string(),
+            self.hashed.content.as_human_readable_raw()?,
+        );
+        let hash = serde_json::from_str(&serde_json::to_string(&self.hashed.hash)?)?;
+        out.insert("hash".to_string(), transform_action_hash(&hash)?);
+        let sig = serde_json::from_str(&serde_json::to_string(&self.signature)?)?;
+        out.insert("signature".to_string(), transform_flatten_byte_array(&sig)?);
+
+        Ok(serde_json::Value::Object(out))
+    }
+
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
+        self.as_human_readable_raw()
     }
 }
 
@@ -288,14 +382,8 @@ impl HumanReadable for Entry {
         Ok(out)
     }
 
-    fn as_human_readable(&self) -> HcOpsResult<String> {
-        let entry = self.as_human_readable_raw()?;
-        Ok(serde_json::to_string(&entry)?)
-    }
-
-    fn as_human_readable_summary(&self) -> HcOpsResult<String> {
-        let entry = self.as_human_readable_raw()?;
-        Ok(serde_json::to_string(&entry)?)
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
+        self.as_human_readable_raw()
     }
 }
 
@@ -304,12 +392,33 @@ impl HumanReadable for AgentPubKey {
         Ok(serde_json::Value::String(format!("{:?}", self)))
     }
 
-    fn as_human_readable(&self) -> HcOpsResult<String> {
-        Ok(serde_json::to_string(&self.as_human_readable_raw()?)?)
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
+        self.as_human_readable_raw()
+    }
+}
+
+impl HumanReadable for ChainRecord {
+    fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
+        let mut obj = serde_json::Map::new();
+        obj.insert("action".to_string(), self.action.as_human_readable_raw()?);
+        obj.insert(
+            "validation_status".to_string(),
+            serde_json::Value::String(format!("{:?}", self.validation_status)),
+        );
+        obj.insert(
+            "entry".to_string(),
+            self.entry
+                .as_ref()
+                .map(|e: &Entry| -> HcOpsResult<serde_json::Value> { e.as_human_readable_raw() })
+                .transpose()?
+                .unwrap_or_else(|| serde_json::Value::Null),
+        );
+
+        Ok(serde_json::Value::Object(obj))
     }
 
-    fn as_human_readable_summary(&self) -> HcOpsResult<String> {
-        self.as_human_readable()
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
+        self.as_human_readable_raw()
     }
 }
 

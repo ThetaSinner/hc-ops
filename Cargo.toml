@@ -40,6 +40,7 @@ serde = { version = "1.0.203", features = ["derive"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros"] }
+rand = "0.9"
 holochain = { version = "0.4.1", default-features = false, features = ["sweettest", "wasmer_sys"] }
 
 fixture_types = { path = "fixture/fixture_types" }

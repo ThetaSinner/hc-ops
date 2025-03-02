@@ -1,13 +1,14 @@
-use anyhow::{Context, bail};
+use anyhow::Context;
 use diesel::SqliteConnection;
 use hc_ops::HcOpsResult;
-use hc_ops::readable::HumanReadable;
+use hc_ops::readable::{HumanReadable, HumanReadableDisplay};
 use hc_ops::retrieve::{
-    AuthoredMeta, CacheMeta, DbKind, DhtMeta, DhtOp, get_all_actions, get_all_dht_ops,
-    get_all_entries, list_discovered_agents, load_database_key, open_holochain_database,
+    AuthoredMeta, CacheMeta, DbKind, DhtMeta, DhtOp, get_agent_chain, get_all_actions,
+    get_all_dht_ops, get_all_entries, list_discovered_agents, load_database_key,
+    open_holochain_database,
 };
 use holochain_conductor_api::{AppInfo, CellInfo};
-use holochain_zome_types::prelude::{DnaHash, Entry, SignedAction};
+use holochain_zome_types::prelude::{AgentPubKey, AgentPubKeyB64, DnaHash, Entry, SignedAction};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 
@@ -41,6 +42,7 @@ pub async fn start_explorer(
 
     enum Operation {
         WhoIsHere,
+        AgentChain,
         Dump,
         Exit,
     }
@@ -49,13 +51,19 @@ pub async fn start_explorer(
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             match self {
                 Operation::WhoIsHere => write!(f, "Who is here?"),
+                Operation::AgentChain => write!(f, "View an agent chain"),
                 Operation::Dump => write!(f, "Dump"),
                 Operation::Exit => write!(f, "Exit"),
             }
         }
     }
 
-    let operations = vec![Operation::WhoIsHere, Operation::Dump, Operation::Exit];
+    let operations = vec![
+        Operation::WhoIsHere,
+        Operation::AgentChain,
+        Operation::Dump,
+        Operation::Exit,
+    ];
     loop {
         let selected = dialoguer::Select::new()
             .with_prompt("Select an operation")
@@ -69,41 +77,51 @@ pub async fn start_explorer(
 
                 println!(
                     "Discovered agents: {}",
-                    serde_json::to_string_pretty(&discovered.as_human_readable_raw()?)?
+                    discovered.as_human_readable_pretty()?
                 );
+            }
+            Operation::AgentChain => {
+                let key: String = dialoguer::Input::new()
+                    .with_prompt("Enter the agent pubkey")
+                    .interact()?;
+
+                let key: AgentPubKey = AgentPubKeyB64::from_b64_str(&key)
+                    .context("Invalid agent key")?
+                    .into();
+
+                let chain = get_agent_chain(&mut dht, &mut cache, &key)?;
+
+                println!("Agent chain: {}", chain.as_human_readable_pretty()?);
             }
             Operation::Dump => {
                 let out = get_all_dht_ops(&mut authored);
                 println!(
                     "Authored ops: {}\n\n",
-                    serde_json::to_string_pretty(
-                        &out.into_iter()
-                            .map(TryInto::try_into)
-                            .collect::<HcOpsResult<Vec<DhtOp<AuthoredMeta>>>>()?
-                            .as_human_readable_raw()?
-                    )?
+                    out.into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<HcOpsResult<Vec<DhtOp<AuthoredMeta>>>>()?
+                        .as_human_readable_pretty()
+                        .context("Could not convert authored ops")?
                 );
 
                 let out = get_all_actions(&mut authored);
                 println!(
                     "Authored actions: {}",
-                    serde_json::to_string_pretty(&serde_json::from_str::<serde_json::Value>(
-                        &out.into_iter()
-                            .map(TryInto::try_into)
-                            .collect::<HcOpsResult<Vec<SignedAction>>>()?
-                            .as_human_readable_summary()?
-                    )?)?
+                    out.into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<HcOpsResult<Vec<SignedAction>>>()?
+                        .as_human_readable_summary_pretty()
+                        .context("Could not convert authored actions")?
                 );
 
                 let out = get_all_entries(&mut authored);
                 println!(
                     "Authored entries: {}",
-                    serde_json::to_string_pretty(&serde_json::from_str::<serde_json::Value>(
-                        &out.into_iter()
-                            .map(TryInto::try_into)
-                            .collect::<HcOpsResult<Vec<Entry>>>()?
-                            .as_human_readable_summary()?
-                    )?)?
+                    out.into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<HcOpsResult<Vec<Entry>>>()?
+                        .as_human_readable_summary_pretty()
+                        .context("Could not convert authored entries")?
                 );
 
                 let out = get_all_dht_ops(&mut dht);
@@ -120,34 +138,28 @@ pub async fn start_explorer(
                 let out = get_all_actions(&mut dht);
                 println!(
                     "DHT actions: {}",
-                    serde_json::to_string_pretty(&serde_json::from_str::<serde_json::Value>(
-                        &out.into_iter()
-                            .map(TryInto::try_into)
-                            .collect::<HcOpsResult<Vec<SignedAction>>>()?
-                            .as_human_readable_summary()?
-                    )?)?
+                    out.into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<HcOpsResult<Vec<SignedAction>>>()?
+                        .as_human_readable_summary_pretty()?
                 );
 
                 let out = get_all_dht_ops(&mut cache);
                 println!(
                     "Cache ops: {}\n\n",
-                    serde_json::to_string_pretty(
-                        &out.into_iter()
-                            .map(TryInto::try_into)
-                            .collect::<HcOpsResult<Vec<DhtOp<CacheMeta>>>>()?
-                            .as_human_readable_raw()?
-                    )?
+                    out.into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<HcOpsResult<Vec<DhtOp<CacheMeta>>>>()?
+                        .as_human_readable_pretty()?
                 );
 
                 let out = get_all_actions(&mut cache);
                 println!(
                     "Cache actions: {}",
-                    serde_json::to_string_pretty(&serde_json::from_str::<serde_json::Value>(
-                        &out.into_iter()
-                            .map(TryInto::try_into)
-                            .collect::<HcOpsResult<Vec<SignedAction>>>()?
-                            .as_human_readable_summary()?
-                    )?)?
+                    out.into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<HcOpsResult<Vec<SignedAction>>>()?
+                        .as_human_readable_summary_pretty()?
                 );
             }
             Operation::Exit => {
@@ -207,7 +219,7 @@ pub fn select_dna(app: &AppInfo) -> anyhow::Result<&DnaHash> {
         .collect::<Vec<_>>();
 
     if dna_hashes.is_empty() {
-        bail!("No DNAs found");
+        anyhow::bail!("No DNAs found");
     } else if dna_hashes.len() == 1 {
         println!("Selecting the only DNA: {:?}", dna_hashes[0].2);
         return Ok(dna_hashes[0].2);

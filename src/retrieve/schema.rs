@@ -66,4 +66,4 @@ diesel::table! {
 }
 
 joinable!(DhtOp -> Action (action_hash));
-allow_tables_to_appear_in_same_query!(Action, DhtOp);
+allow_tables_to_appear_in_same_query!(Action, Entry, DhtOp);

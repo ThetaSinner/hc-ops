@@ -2,7 +2,7 @@ use crate::cli::{AdminArgs, AdminCommands};
 use crate::connect_admin_client;
 use crate::render::Render;
 use diesel::SqliteConnection;
-use hc_ops::readable::HumanReadable;
+use hc_ops::readable::HumanReadableDisplay;
 use holochain_client::InstallAppPayload;
 use holochain_conductor_api::{StorageBlob, StorageInfo};
 use holochain_types::prelude::AppBundleSource;
