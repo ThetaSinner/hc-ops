@@ -1,6 +1,23 @@
+[tasks.format-rust]
+command = "cargo"
+args = ["fmt"]
+
+[tasks.format-toml]
+install_crate = "taplo"
+command = "taplo"
+args = ["format"]
+
 [tasks.format]
+dependencies = ["format-rust", "format-toml"]
+
+[tasks.format-rust-check]
 command = "cargo"
 args = ["fmt", "--", "--check"]
+
+[tasks.format-toml-check]
+install_crate = "taplo"
+command = "taplo"
+args = ["format", "--check"]
 
 [tasks.clippy]
 command = "cargo"
@@ -22,11 +39,12 @@ args = ["hack", "check", "--feature-powerset", "--no-dev-deps"]
 
 [tasks.verify]
 dependencies = [
-    "format",
-    "clippy",
-    "test",
-    "each-feature",
-    "all-features",
+  "format-rust-check",
+  "format-toml-check",
+  "clippy",
+  "test",
+  "each-feature",
+  "all-features",
 ]
 
 [tasks.default]

@@ -1,9 +1,5 @@
 [workspace]
-members = [
-    "fixture",
-    "fixture_integrity",
-    "fixture_types"
-]
+members = ["fixture", "fixture_integrity", "fixture_types"]
 
 resolver = "3"
 
