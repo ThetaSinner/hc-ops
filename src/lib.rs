@@ -30,6 +30,13 @@ pub enum HcOpsError {
     #[cfg(feature = "discover")]
     #[error("Process lookup error: {0}")]
     ProcCtl(#[from] proc_ctl::ProcCtlError),
+
+    #[error("{context}\n\tcaused by: {source}")]
+    Context {
+        #[source]
+        source: Box<HcOpsError>,
+        context: String,
+    },
 }
 
 impl HcOpsError {
@@ -46,3 +53,16 @@ impl HcOpsError {
 }
 
 pub type HcOpsResult<T> = Result<T, HcOpsError>;
+
+pub trait HcOpsResultContextExt<T> {
+    fn context(self, context: impl Into<String>) -> HcOpsResult<T>;
+}
+
+impl<S> HcOpsResultContextExt<S> for HcOpsResult<S> {
+    fn context(self, context: impl Into<String>) -> HcOpsResult<S> {
+        self.map_err(|e| HcOpsError::Context {
+            source: Box::new(e),
+            context: context.into(),
+        })
+    }
+}

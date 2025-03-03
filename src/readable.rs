@@ -1,5 +1,5 @@
 use crate::retrieve::{ChainRecord, DhtOp, Record};
-use crate::{HcOpsError, HcOpsResult};
+use crate::{HcOpsError, HcOpsResult, HcOpsResultContextExt};
 use holochain_conductor_api::AppInfo;
 use holochain_zome_types::prelude::{
     Action, ActionHash, AgentPubKey, AnyDhtHash, DhtOpHash, DnaHash, Entry, EntryHash,
@@ -328,7 +328,8 @@ impl HumanReadable for Entry {
                         out["entry"] = transform_agent_pub_key(&out["entry"])?;
                     }
                     if out["entry_type"] == "App" {
-                        out["entry"] = transform_msgpack_blob(&out["entry"])?;
+                        out["entry"] = transform_msgpack_blob(&out["entry"])
+                            .context("Could not convert app entry from msgpack")?;
                     }
                     if out["entry_type"] == "CapClaim" {
                         if let Some(entry) = out["entry"].as_object_mut() {
@@ -584,9 +585,10 @@ fn transform_msgpack_blob(input: &serde_json::Value) -> HcOpsResult<serde_json::
             .ok_or_else(|| HcOpsError::Other("Invalid msgpack blob".into()))?,
     )?;
 
-    let as_json = holochain_serialized_bytes::decode::<_, serde_json::Value>(&blob)?;
-
-    Ok(as_json)
+    match holochain_serialized_bytes::decode::<_, serde_json::Value>(&blob) {
+        Ok(as_json) => Ok(as_json),
+        Err(_) => transform_flatten_byte_array(input),
+    }
 }
 
 fn transform_flatten_byte_array(input: &serde_json::Value) -> HcOpsResult<serde_json::Value> {

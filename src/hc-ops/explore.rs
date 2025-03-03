@@ -1,16 +1,32 @@
 use anyhow::Context;
 use diesel::SqliteConnection;
-use hc_ops::HcOpsResult;
 use hc_ops::readable::{HumanReadable, HumanReadableDisplay};
 use hc_ops::retrieve::{
     AuthoredMeta, CacheMeta, DbKind, DhtMeta, DhtOp, get_agent_chain, get_all_actions,
     get_all_dht_ops, get_all_entries, get_pending_ops, list_discovered_agents, load_database_key,
     open_holochain_database,
 };
+use hc_ops::{HcOpsError, HcOpsResult};
 use holochain_conductor_api::{AppInfo, CellInfo};
 use holochain_zome_types::prelude::{AgentPubKey, AgentPubKeyB64, DnaHash, Entry, SignedAction};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
+
+pub trait AsAnyhowPretty<T> {
+    fn into_anyhow(self) -> anyhow::Result<T>;
+}
+
+impl<T> AsAnyhowPretty<T> for HcOpsResult<T> {
+    fn into_anyhow(self) -> anyhow::Result<T> {
+        match self {
+            Ok(t) => Ok(t),
+            Err(HcOpsError::Context { source, context }) => {
+                Err(*source).into_anyhow().context(context)
+            }
+            Err(e) => Err(anyhow::anyhow!(e.to_string())),
+        }
+    }
+}
 
 pub async fn start_explorer(
     _conn: &mut SqliteConnection,
@@ -60,7 +76,7 @@ pub async fn start_explorer(
                         break;
                     }
                     Err(e) => {
-                        eprintln!("Error: {:#?}", e);
+                        eprintln!("\nProblem running action: {:?}\n", e);
                     }
                 }
             }
@@ -93,8 +109,8 @@ fn run_explorer(
                 Operation::AgentChain => write!(f, "View an agent chain"),
                 Operation::Pending => write!(f, "View ops pending validation or integration"),
                 Operation::Dump => write!(f, "Dump"),
-                Operation::Back => write!(f, "Back"),
-                Operation::Exit => write!(f, "Exit"),
+                Operation::Back => write!(f, ":back"),
+                Operation::Exit => write!(f, ":exit"),
             }
         }
     }
@@ -132,9 +148,12 @@ fn run_explorer(
                     .context("Invalid agent key")?
                     .into();
 
-                let chain = get_agent_chain(dht, cache, &key)?;
+                let chain = get_agent_chain(dht, cache, &key).into_anyhow()?;
 
-                println!("Agent chain: {}", chain.as_human_readable_pretty()?);
+                println!(
+                    "Agent chain: {}",
+                    chain.as_human_readable_pretty().into_anyhow()?
+                );
             }
             Operation::Pending => {
                 let pending = get_pending_ops(dht)?;
