@@ -12,6 +12,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
+      - uses: cachix/cachix-action@v15
+        with:
+          name: holochain-ci
+      - name: Package fixture
+        run: |
+          cd fixture
+          ./package.sh
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-make@0.37.24
