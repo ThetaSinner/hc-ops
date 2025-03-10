@@ -122,9 +122,11 @@ pub enum AdminCommands {
         path: PathBuf,
 
         /// Set a network seed for the app
+        #[arg(long)]
         network_seed: Option<String>,
 
         /// Override the app id that the app will be installed under
+        #[arg(long)]
         app_id: Option<String>,
     },
     /// Uninstall an app

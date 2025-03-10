@@ -4,7 +4,6 @@
   inputs = {
     holonix = {
         url = "github:holochain/holonix?ref=main-0.4";
-        inputs.holochain.url = "github:holochain/holochain?ref=fix-storage-info-for-empty-db";
     };
 
     nixpkgs.follows = "holonix/nixpkgs";
