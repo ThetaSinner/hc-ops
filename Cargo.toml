@@ -9,10 +9,10 @@ path = "src/hc-ops/main.rs"
 
 [dependencies]
 clap = "4.5"
-holochain_client = { version = "0.6.1", default-features = false }
-holochain_conductor_api = "0.4.1"
-holochain_types = "0.4.1"
-holochain_zome_types = "0.4.1"
+holochain_client = { version = "0.6.2", default-features = false }
+holochain_conductor_api = "0.4.2"
+holochain_types = "0.4.2"
+holochain_zome_types = "0.4.2"
 holochain_serialized_bytes = "=0.0.55"
 thiserror = "2"
 anyhow = "1"
@@ -37,13 +37,13 @@ libc = "0.2.170"
 rpassword = "7.3"
 
 proc-ctl = { version = "0.4.1", optional = true }
-holochain_websocket = { version = "0.4.1", optional = true }
+holochain_websocket = { version = "0.4.2", optional = true }
 serde = { version = "1.0.203", features = ["derive"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros"] }
 rand = "0.9"
-holochain = { version = "0.4.1", default-features = false, features = [
+holochain = { version = "0.4.2", default-features = false, features = [
   "sweettest",
   "wasmer_sys",
 ] }
