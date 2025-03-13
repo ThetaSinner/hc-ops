@@ -412,7 +412,7 @@ impl HumanReadable for ChainRecord {
                 .as_ref()
                 .map(|e: &Entry| -> HcOpsResult<serde_json::Value> { e.as_human_readable_raw() })
                 .transpose()?
-                .unwrap_or_else(|| serde_json::Value::Null),
+                .unwrap_or(serde_json::Value::Null),
         );
 
         Ok(serde_json::Value::Object(obj))
@@ -435,7 +435,7 @@ impl HumanReadable for Record {
                 .as_ref()
                 .map(|e| e.as_human_readable_raw())
                 .transpose()?
-                .unwrap_or_else(|| serde_json::Value::Null),
+                .unwrap_or(serde_json::Value::Null),
         );
 
         Ok(serde_json::Value::Object(out))
@@ -458,7 +458,7 @@ impl HumanReadable for Record {
                 .as_ref()
                 .map(|e| e.as_human_readable_summary_raw())
                 .transpose()?
-                .unwrap_or_else(|| serde_json::Value::Null),
+                .unwrap_or(serde_json::Value::Null),
         );
 
         Ok(serde_json::Value::Object(out))
