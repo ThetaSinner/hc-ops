@@ -2,8 +2,17 @@
 
 set -euo pipefail
 
-cargo build --release --target wasm32-unknown-unknown -p fixture
-cargo build --release --target wasm32-unknown-unknown -p fixture_integrity
+SCRIPT_DIR=$(dirname "$0")
 
-nix develop --quiet --command bash -c "cd happ/dna && hc dna pack ."
-nix develop --quiet --command bash -c "cd happ && hc app pack ."
+cargo build --release --target wasm32-unknown-unknown --manifest-path "$SCRIPT_DIR/fixture/Cargo.toml"
+cargo build --release --target wasm32-unknown-unknown --manifest-path "$SCRIPT_DIR/fixture_integrity/Cargo.toml"
+
+pushd "$SCRIPT_DIR/happ/dna" || exit 1
+hc dna pack .
+popd || exit 1
+
+pushd "$SCRIPT_DIR/happ" || exit 1
+hc app pack .
+popd || exit 1
+
+echo "Packaging complete"
