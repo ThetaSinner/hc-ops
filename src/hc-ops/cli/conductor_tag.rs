@@ -15,6 +15,8 @@ pub(crate) async fn handle_conductor_tag_command(
             port,
             #[cfg(feature = "discover")]
             name,
+            #[cfg(feature = "discover")]
+            origin,
         } => {
             if let (Some(addr), Some(port)) = (addr, port) {
                 data::insert_conductor_tag(conn, &tag, SocketAddr::new(addr, port))?;
@@ -22,7 +24,8 @@ pub(crate) async fn handle_conductor_tag_command(
                 #[cfg(feature = "discover")]
                 {
                     let addr =
-                        crate::interactive::interactive_discover_holochain_addr(name).await?;
+                        crate::interactive::interactive_discover_holochain_addr(name, &origin)
+                            .await?;
                     data::insert_conductor_tag(conn, &tag, addr)?;
                 }
             }

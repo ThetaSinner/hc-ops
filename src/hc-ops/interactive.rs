@@ -1,6 +1,7 @@
 #[cfg(feature = "discover")]
 pub async fn interactive_discover_holochain_addr(
     name: String,
+    origin: &str,
 ) -> anyhow::Result<std::net::SocketAddr> {
     use hc_ops::discover::{discover_admin_addr, discover_possible_processes};
 
@@ -35,7 +36,7 @@ pub async fn interactive_discover_holochain_addr(
             .map_err(|e| anyhow::anyhow!(e))?
     };
 
-    if let Some(addr) = discover_admin_addr(&ports).await? {
+    if let Some(addr) = discover_admin_addr(&ports, origin).await? {
         println!("Selected process {}, at address {}", proc.pid, addr);
         Ok(addr)
     } else {

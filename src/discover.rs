@@ -8,7 +8,7 @@
 //!     let possible_processes = discover_possible_processes("holochain").unwrap();
 //!
 //!     if possible_processes.len() == 1 {
-//!         let admin_addr = discover_admin_addr(&possible_processes[0].1).await.unwrap();
+//!         let admin_addr = discover_admin_addr(&possible_processes[0].1, "hc-ops").await.unwrap();
 //!
 //!         if let Some(addr) = admin_addr {
 //!             // We found a Holochain process with an open admin port
@@ -69,9 +69,9 @@ pub fn discover_possible_processes(
         .collect::<Vec<_>>())
 }
 
-pub async fn discover_admin_addr(ports: &[u16]) -> HcOpsResult<Option<SocketAddr>> {
+pub async fn discover_admin_addr(ports: &[u16], origin: &str) -> HcOpsResult<Option<SocketAddr>> {
     for port in ports {
-        if let Some(out) = test_admin_port(*port).await {
+        if let Some(out) = test_admin_port(*port, origin).await {
             return Ok(Some(out));
         }
     }
@@ -79,7 +79,7 @@ pub async fn discover_admin_addr(ports: &[u16]) -> HcOpsResult<Option<SocketAddr
     Ok(None)
 }
 
-async fn test_admin_port(port: u16) -> Option<SocketAddr> {
+async fn test_admin_port(port: u16, origin: &str) -> Option<SocketAddr> {
     let ipv6_addr: SocketAddr = (Ipv6Addr::LOCALHOST, port).into();
     let ipv4_addr: SocketAddr = (Ipv4Addr::LOCALHOST, port).into();
 
@@ -89,7 +89,7 @@ async fn test_admin_port(port: u16) -> Option<SocketAddr> {
 
     for addr in [ipv6_addr, ipv4_addr] {
         let req = holochain_websocket::ConnectRequest::new(addr)
-            .try_set_header("Origin", "hc-ops")
+            .try_set_header("Origin", origin)
             .unwrap();
 
         if let Ok((tx, mut rx)) = holochain_websocket::connect(cfg.clone(), req).await {
