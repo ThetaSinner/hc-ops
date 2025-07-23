@@ -10,9 +10,9 @@ path = "src/hc-ops/main.rs"
 [dependencies]
 clap = "4.5"
 holochain_client = { version = "0.6.2", default-features = false }
-holochain_conductor_api = "0.4.2"
-holochain_types = "0.4.2"
-holochain_zome_types = "0.4.2"
+holochain_conductor_api = "0.4.4"
+holochain_types = "0.4.4"
+holochain_zome_types = "0.4.4"
 holochain_serialized_bytes = "=0.0.55"
 thiserror = "2"
 anyhow = "1"
@@ -43,7 +43,7 @@ serde = { version = "1.0.203", features = ["derive"] }
 [dev-dependencies]
 tokio = { version = "1", features = ["macros"] }
 rand = "0.9"
-holochain = { version = "0.4.2", default-features = false, features = [
+holochain = { version = "0.4.4", default-features = false, features = [
   "sweettest",
   "wasmer_sys",
 ] }
