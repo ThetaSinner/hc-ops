@@ -30,7 +30,6 @@ async fn main() -> anyhow::Result<()> {
         PathBuf::from(url)
     } else {
         let dir = xdg::BaseDirectories::new()
-            .context("Could not discover directory layout")?
             .create_config_directory(Path::new("hc-ops"))
             .context("Failed to create config directory")?;
 

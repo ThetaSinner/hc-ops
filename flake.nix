@@ -3,7 +3,7 @@
 
   inputs = {
     holonix = {
-        url = "github:holochain/holonix?ref=main-0.4";
+        url = "github:holochain/holonix?ref=main-0.5";
     };
 
     nixpkgs.follows = "holonix/nixpkgs";
@@ -49,6 +49,7 @@
       devShells.default = pkgs.mkShell {
         packages = (with inputs'.holonix.packages; [
           holochain
+          hc
           lair-keystore
           hc-launch
           hc-scaffold
@@ -61,6 +62,8 @@
 
         shellHook = ''
           export PS1='\[\033[1;34m\][holonix:\w]\$\[\033[0m\] '
+
+          export LIBCLANG_PATH="${pkgs.llvmPackages_18.libclang.lib}/lib"
         '';
       };
     };

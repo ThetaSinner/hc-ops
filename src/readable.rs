@@ -510,7 +510,7 @@ fn transform_cell_id(input: &serde_json::Value) -> HcOpsResult<serde_json::Value
 fn transform_dna_hash(input: &serde_json::Value) -> HcOpsResult<serde_json::Value> {
     Ok(serde_json::Value::String(format!(
         "{:?}",
-        DnaHash::from_raw_39(convert_byte_array(input.as_array().ok_or_else(|| {
+        DnaHash::try_from_raw_39(convert_byte_array(input.as_array().ok_or_else(|| {
             HcOpsError::Other("Cannot convert to a dna hash, not an array".into())
         })?)?)
         .map_err(HcOpsError::other)?
@@ -520,7 +520,7 @@ fn transform_dna_hash(input: &serde_json::Value) -> HcOpsResult<serde_json::Valu
 fn transform_agent_pub_key(input: &serde_json::Value) -> HcOpsResult<serde_json::Value> {
     Ok(serde_json::Value::String(format!(
         "{:?}",
-        AgentPubKey::from_raw_39(convert_byte_array(input.as_array().ok_or_else(|| {
+        AgentPubKey::try_from_raw_39(convert_byte_array(input.as_array().ok_or_else(|| {
             HcOpsError::Other("Cannot convert to an agent pub key, not an array".into())
         })?)?)
         .map_err(HcOpsError::other)?
@@ -530,7 +530,7 @@ fn transform_agent_pub_key(input: &serde_json::Value) -> HcOpsResult<serde_json:
 fn transform_dht_op_hash(input: &serde_json::Value) -> HcOpsResult<serde_json::Value> {
     Ok(serde_json::Value::String(format!(
         "{:?}",
-        DhtOpHash::from_raw_39(convert_byte_array(input.as_array().ok_or_else(|| {
+        DhtOpHash::try_from_raw_39(convert_byte_array(input.as_array().ok_or_else(|| {
             HcOpsError::Other("Cannot convert to a dht op hash, not an array".into())
         })?)?)
         .map_err(HcOpsError::other)?
@@ -540,7 +540,7 @@ fn transform_dht_op_hash(input: &serde_json::Value) -> HcOpsResult<serde_json::V
 fn transform_any_linkable_hash(input: &serde_json::Value) -> HcOpsResult<serde_json::Value> {
     Ok(serde_json::Value::String(format!(
         "{:?}",
-        AnyDhtHash::from_raw_39(convert_byte_array(input.as_array().ok_or_else(|| {
+        AnyDhtHash::try_from_raw_39(convert_byte_array(input.as_array().ok_or_else(|| {
             HcOpsError::Other("Cannot convert to an any dht op hash, not an array".into())
         })?)?)
         .map_err(HcOpsError::other)?
@@ -550,7 +550,7 @@ fn transform_any_linkable_hash(input: &serde_json::Value) -> HcOpsResult<serde_j
 fn transform_action_hash(input: &serde_json::Value) -> HcOpsResult<serde_json::Value> {
     Ok(serde_json::Value::String(format!(
         "{:?}",
-        ActionHash::from_raw_39(convert_byte_array(input.as_array().ok_or_else(|| {
+        ActionHash::try_from_raw_39(convert_byte_array(input.as_array().ok_or_else(|| {
             HcOpsError::Other("Cannot convert to an action hash, not an array".into())
         })?)?)
         .map_err(HcOpsError::other)?
@@ -560,7 +560,7 @@ fn transform_action_hash(input: &serde_json::Value) -> HcOpsResult<serde_json::V
 fn transform_entry_hash(input: &serde_json::Value) -> HcOpsResult<serde_json::Value> {
     Ok(serde_json::Value::String(format!(
         "{:?}",
-        EntryHash::from_raw_39(convert_byte_array(input.as_array().ok_or_else(|| {
+        EntryHash::try_from_raw_39(convert_byte_array(input.as_array().ok_or_else(|| {
             HcOpsError::Other("Cannot convert to an entry hash, not an array".into())
         })?)?)
         .map_err(HcOpsError::other)?
