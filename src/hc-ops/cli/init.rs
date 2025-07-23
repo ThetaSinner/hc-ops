@@ -56,14 +56,14 @@ pub(crate) async fn handle_init_command(
                 out.render(std::io::stdout())?;
             }
         }
-        InitCommands::Execute { app_id } => {
+        InitCommands::Execute { origin, app_id } => {
             let signer = Arc::new(holochain_client::ClientAgentSigner::default());
             let app_client = client
                 .connect_app_client(
                     IpAddr::from_str(tag.address.as_str())?,
                     app_id.clone(),
                     // TODO Not exposed by the client
-                    "holochain_websocket", // "hc-ops",
+                    origin,
                     signer.clone(),
                 )
                 .await?;

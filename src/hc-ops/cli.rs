@@ -60,6 +60,11 @@ pub enum ConductorTagCommands {
         #[arg(short, long, default_value = "holochain")]
         name: String,
 
+        /// The origin header to use in the request
+        #[cfg(feature = "discover")]
+        #[arg(long, default_value = "hc-ops")]
+        origin: String,
+
         /// The tag to assign for the selected Holochain admin port
         tag: String,
     },
@@ -158,6 +163,10 @@ pub enum InitCommands {
 
     #[command(arg_required_else_help = true)]
     Execute {
+        /// The origin header to use in the request
+        #[arg(long, default_value = "hc-ops")]
+        origin: String,
+
         /// The app id to initialise cells for
         app_id: String,
     },
