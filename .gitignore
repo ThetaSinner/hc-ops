@@ -1,4 +1,5 @@
 /target
+/fixture/target
 *.happ
 development.sqlite3
 *.hc
