@@ -20,7 +20,7 @@ nix develop
 The inside that shell:
 
 ```bash
-hc s clean && echo "1234" | hc s --piped create && echo "1234" | hc s --piped -f 8888 run
+hc s clean && echo -n "1234" | hc s --piped create && echo -n "1234" | hc s --piped -f 8888 run
 ```
 
 ### Using in a test setup

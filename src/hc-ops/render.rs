@@ -88,7 +88,7 @@ impl From<AgentTag> for AgentTagTable {
         Self {
             agent: format!(
                 "{:?}",
-                AgentPubKey::from_raw_39(tag.agent).expect("Invalid agent key stored")
+                AgentPubKey::try_from_raw_39(tag.agent).expect("Invalid agent key stored")
             ),
             tag: tag.tag,
         }

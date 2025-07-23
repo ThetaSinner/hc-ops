@@ -27,6 +27,7 @@ pub fn load_database_key<P: AsRef<Path>>(
 ) -> HcOpsResult<Option<Key>> {
     let db_key = data_root_path.as_ref().join("databases").join("db.key");
     Ok(if db_key.exists() {
+        println!("Found database key at {}", db_key.display());
         Some(Key::load(db_key, passphrase)?)
     } else {
         None
@@ -90,7 +91,7 @@ pub fn list_discovered_agents(
 
     let mut out = Vec::with_capacity(loaded.len());
     for v in loaded {
-        out.push(AgentPubKey::from_raw_39(v)?);
+        out.push(AgentPubKey::try_from_raw_39(v)?);
     }
 
     Ok(out)

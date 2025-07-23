@@ -2,7 +2,6 @@ use crate::{HcOpsError, HcOpsResult};
 use base64::Engine;
 use diesel::SqliteConnection;
 use diesel::connection::SimpleConnection;
-use std::io::Error;
 use std::path::PathBuf;
 
 pub struct Key {
@@ -57,12 +56,7 @@ impl Key {
 
         let mut key = sodoken::SizedLockedArray::<{ sodoken::secretbox::XSALSA_KEYBYTES }>::new()?;
 
-        // TODO Can't use this yet, Holochain 0.4 is using a different algorithm.
-        // sodoken::secretbox::xsalsa_open_easy(&mut *key.lock(), &cipher, &nonce, &secret.lock()).map_err(|_| {
-        //     HcOpsError::Other("Failed to decrypt key".into())
-        // })?;
-
-        legacy_xsalsa_open_easy(&mut *key.lock(), &cipher, &nonce, &secret.lock())
+        sodoken::secretbox::xsalsa_open_easy(&mut *key.lock(), &cipher, &nonce, &secret.lock())
             .map_err(|_| HcOpsError::Other("Failed to decrypt key".into()))?;
 
         Ok(Key { key, salt })
@@ -97,33 +91,4 @@ PRAGMA cipher_plaintext_header_size = 32;
     conn.batch_execute(std::str::from_utf8(&stmt.lock()).map_err(HcOpsError::other)?)?;
 
     Ok(())
-}
-
-fn legacy_xsalsa_open_easy(
-    message: &mut [u8],
-    cipher: &[u8],
-    nonce: &[u8; libsodium_sys::crypto_secretbox_xchacha20poly1305_NONCEBYTES as usize],
-    shared_key: &[u8; libsodium_sys::crypto_secretstream_xchacha20poly1305_KEYBYTES as usize],
-) -> std::io::Result<()> {
-    let msg_len =
-        cipher.len() - libsodium_sys::crypto_secretbox_xchacha20poly1305_MACBYTES as usize;
-
-    if message.len() != msg_len {
-        return Err(Error::other("bad message size"));
-    }
-
-    unsafe {
-        if libsodium_sys::crypto_secretbox_xchacha20poly1305_open_easy(
-            message.as_mut_ptr() as *mut libc::c_uchar,
-            cipher.as_ptr() as *const libc::c_uchar,
-            cipher.len() as libc::c_ulonglong,
-            nonce.as_ptr() as *const libc::c_uchar,
-            shared_key.as_ptr() as *const libc::c_uchar,
-        ) == 0_i32
-        {
-            Ok(())
-        } else {
-            Err(Error::other("internal"))
-        }
-    }
 }

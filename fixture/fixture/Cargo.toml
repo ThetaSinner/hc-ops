@@ -9,6 +9,7 @@ name = "fixture"
 
 [dependencies]
 hdk = { workspace = true }
+holochain_serialized_bytes = { workspace = true }
 
 fixture_integrity = { workspace = true }
 fixture_types = { workspace = true }

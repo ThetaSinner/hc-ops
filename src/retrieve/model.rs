@@ -187,16 +187,16 @@ impl TryFrom<DbDhtOp> for DhtOp {
 
     fn try_from(value: DbDhtOp) -> HcOpsResult<Self> {
         Ok(DhtOp {
-            hash: DhtOpHash::from_raw_39(value.hash)?,
+            hash: DhtOpHash::try_from_raw_39(value.hash)?,
             typ: value
                 .typ
                 .ok_or_else(|| HcOpsError::Other("No DhtOpType stored".into()))?,
-            basis_hash: AnyLinkableHash::from_raw_39(
+            basis_hash: AnyLinkableHash::try_from_raw_39(
                 value
                     .basis_hash
                     .ok_or_else(|| HcOpsError::Other("No basis hash stored".into()))?,
             )?,
-            action_hash: ActionHash::from_raw_39(
+            action_hash: ActionHash::try_from_raw_39(
                 value
                     .action_hash
                     .ok_or_else(|| HcOpsError::Other("No action hash stored".into()))?,
