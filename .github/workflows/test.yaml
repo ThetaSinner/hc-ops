@@ -14,7 +14,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
-          tool: holochain_cli@0.4.2
+          tool: holochain_cli@0.5.4
       - name: Package fixture
         run: |
           ./fixture/package.sh
