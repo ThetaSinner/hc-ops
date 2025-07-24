@@ -47,7 +47,9 @@
         };
 
       devShells.default = pkgs.mkShell {
-        packages = (with inputs'.holonix.packages; [
+        packages = [
+            pkgs.llvmPackages_18.libunwind
+        ] ++ (with inputs'.holonix.packages; [
           holochain
           hc
           lair-keystore
