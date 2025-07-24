@@ -66,14 +66,25 @@ async fn main() -> anyhow::Result<()> {
 async fn connect_admin_client(
     conn: &mut SqliteConnection,
     tag: &str,
+    origin: &str,
 ) -> anyhow::Result<(holochain_client::AdminWebsocket, ConductorTag)> {
     let tag = data::get_conductor_tag(conn, tag)?
         .ok_or_else(|| anyhow::anyhow!("No such tag: {}", tag))?;
 
-    let client = holochain_client::AdminWebsocket::connect(SocketAddr::new(
+    let socket_addr = SocketAddr::new(
         IpAddr::from_str(&tag.address).context("Invalid IP address stored")?,
         tag.port as u16,
-    ))
+    );
+
+    let mut request = holochain_client::ConnectRequest::from(socket_addr);
+    request = request
+        .try_set_header("Origin", origin)
+        .context("Failed to set Origin header")?;
+
+    let client = holochain_client::AdminWebsocket::connect_with_request_and_config(
+        request,
+        std::sync::Arc::new(holochain_client::WebsocketConfig::CLIENT_DEFAULT),
+    )
     .await
     .with_context(|| {
         anyhow::anyhow!("Is Holochain running at: ws://{}:{}", tag.address, tag.port)

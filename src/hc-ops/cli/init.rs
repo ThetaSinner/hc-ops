@@ -17,7 +17,7 @@ pub(crate) async fn handle_init_command(
     conn: &mut SqliteConnection,
     args: InitArgs,
 ) -> anyhow::Result<()> {
-    let (client, tag) = connect_admin_client(conn, &args.tag).await?;
+    let (client, tag) = connect_admin_client(conn, &args.tag, &args.origin).await?;
 
     match args.command {
         InitCommands::Check => {

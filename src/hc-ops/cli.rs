@@ -108,6 +108,10 @@ pub struct AdminArgs {
     #[arg(long, short)]
     pub tag: String,
 
+    /// The origin header to use in the request
+    #[arg(long, default_value = "hc-ops")]
+    pub origin: String,
+
     #[command(subcommand)]
     pub command: AdminCommands,
 }
@@ -153,6 +157,10 @@ pub struct InitArgs {
     #[arg(long, short)]
     pub tag: String,
 
+    /// The origin header to use in the request
+    #[arg(long, default_value = "hc-ops")]
+    pub origin: String,
+
     #[command(subcommand)]
     pub command: InitCommands,
 }
@@ -177,6 +185,10 @@ pub struct ExploreArgs {
     /// The tag to use when connecting to Holochain
     #[arg(long, short)]
     pub tag: String,
+
+    /// The origin header to use in the request
+    #[arg(long, default_value = "hc-ops")]
+    pub origin: String,
 
     /// The path to the Holochain data directory
     pub data_root_path: PathBuf,

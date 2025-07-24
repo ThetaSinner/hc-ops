@@ -12,7 +12,7 @@ pub(crate) async fn handle_admin_command(
     conn: &mut SqliteConnection,
     args: AdminArgs,
 ) -> anyhow::Result<()> {
-    let (client, _) = connect_admin_client(conn, &args.tag).await?;
+    let (client, _) = connect_admin_client(conn, &args.tag, &args.origin).await?;
 
     match args.command {
         AdminCommands::ListApps { full } => {
