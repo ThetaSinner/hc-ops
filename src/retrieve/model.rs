@@ -346,3 +346,13 @@ impl TryFrom<DbAction> for SignedAction {
         Ok(holochain_serialized_bytes::decode(value.blob.as_slice())?)
     }
 }
+
+#[derive(Debug, Queryable, Selectable)]
+#[diesel(table_name = crate::retrieve::schema::SliceHash)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct SliceHash {
+    pub arc_start: i32,
+    pub arc_end: i32,
+    pub slice_index: i64,
+    pub hash: Vec<u8>,
+}
