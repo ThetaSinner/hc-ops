@@ -1,12 +1,15 @@
 use crate::retrieve::{ChainRecord, DhtOp, Record};
 use crate::{HcOpsError, HcOpsResult, HcOpsResultContextExt};
+use base64::Engine;
 use holochain_conductor_api::AppInfo;
+use holochain_types::network::Kitsune2NetworkMetrics;
 use holochain_zome_types::prelude::{
     Action, ActionHash, AgentPubKey, AnyDhtHash, DhtOpHash, DnaHash, Entry, EntryHash,
     SignedAction, SignedActionHashed, Timestamp,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use std::collections::HashMap;
 use std::fmt::Debug;
 
 pub trait HumanReadable {
@@ -465,6 +468,99 @@ impl HumanReadable for Record {
     }
 }
 
+impl HumanReadable for Kitsune2NetworkMetrics {
+    fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
+        let mut out: serde_json::Value = serde_json::from_str(&serde_json::to_string(&self)?)?;
+
+        if let Some(metrics) = out.as_object_mut() {
+            if let Some(gossip_state_summary) = metrics.get_mut("gossip_state_summary") {
+                if let Some(dht_summary) = gossip_state_summary
+                    .as_object_mut()
+                    .and_then(|v| v.get_mut("dht_summary"))
+                    .and_then(|v| v.as_object_mut())
+                {
+                    for (_, value) in dht_summary.iter_mut() {
+                        if let Some(value) = value.as_object_mut() {
+                            if let Some(disc_boundary) = value.get_mut("disc_boundary") {
+                                *disc_boundary = transform_timestamp(disc_boundary)?;
+                            }
+
+                            if let Some(disc_top_hash) = value.get_mut("disc_top_hash") {
+                                *disc_top_hash = transform_generic_hash(disc_top_hash)?;
+                            }
+                            if let Some(ring_top_hashes) = value
+                                .get_mut("ring_top_hashes")
+                                .and_then(|v| v.as_array_mut())
+                            {
+                                for ring_top_hash in ring_top_hashes {
+                                    *ring_top_hash = transform_generic_hash(ring_top_hash)?;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if let Some(peer_meta) = gossip_state_summary
+                    .as_object_mut()
+                    .and_then(|v| v.get_mut("peer_meta"))
+                    .and_then(|v| v.as_object_mut())
+                {
+                    for (_, value) in peer_meta.iter_mut() {
+                        if let Some(value) = value.as_object_mut() {
+                            if let Some(last_gossip_timestamp) =
+                                value.get_mut("last_gossip_timestamp")
+                            {
+                                *last_gossip_timestamp =
+                                    transform_timestamp(last_gossip_timestamp)?;
+                            }
+                            if let Some(new_ops_bookmark) = value.get_mut("new_ops_bookmark") {
+                                *new_ops_bookmark = transform_timestamp(new_ops_bookmark)?;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Some(local_agents) = metrics
+                .get_mut("local_agents")
+                .and_then(|v| v.as_array_mut())
+            {
+                for agent in local_agents {
+                    if let Some(agent) = agent.as_object_mut() {
+                        if let Some(agent) = agent.get_mut("agent") {
+                            *agent = transform_agent_pub_key(agent)?;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(out)
+    }
+
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
+        self.as_human_readable_raw()
+    }
+}
+
+impl HumanReadable for HashMap<DnaHash, Kitsune2NetworkMetrics> {
+    fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
+        let mut out = serde_json::Map::new();
+
+        for (dna_hash, metrics) in self {
+            out.insert(format!("{:?}", dna_hash), metrics.as_human_readable_raw()?);
+        }
+
+        Ok(serde_json::Value::Object(out))
+    }
+
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
+        self.as_human_readable_raw()
+    }
+}
+
+impl HumanReadableDisplay for HashMap<DnaHash, Kitsune2NetworkMetrics> {}
+
 fn convert_byte_array(from: &[serde_json::Value]) -> HcOpsResult<Vec<u8>> {
     from.iter()
         .map(|v| {
@@ -565,6 +661,16 @@ fn transform_entry_hash(input: &serde_json::Value) -> HcOpsResult<serde_json::Va
         })?)?)
         .map_err(HcOpsError::other)?
     )))
+}
+
+fn transform_generic_hash(input: &serde_json::Value) -> HcOpsResult<serde_json::Value> {
+    if let Some(arr) = input.as_array() {
+        Ok(serde_json::Value::String(
+            base64::prelude::BASE64_STANDARD.encode(convert_byte_array(arr)?),
+        ))
+    } else {
+        Err(HcOpsError::Other("Invalid generic hash format".into()))
+    }
 }
 
 fn transform_timestamp(input: &serde_json::Value) -> HcOpsResult<serde_json::Value> {

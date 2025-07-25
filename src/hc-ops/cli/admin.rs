@@ -4,8 +4,9 @@ use crate::render::Render;
 use diesel::SqliteConnection;
 use hc_ops::readable::HumanReadableDisplay;
 use holochain_client::InstallAppPayload;
-use holochain_conductor_api::{StorageBlob, StorageInfo};
+use holochain_conductor_api::{AppStatusFilter, CellInfo, StorageBlob, StorageInfo};
 use holochain_types::prelude::AppBundleSource;
+use std::collections::HashMap;
 use std::io::Write;
 
 pub(crate) async fn handle_admin_command(
@@ -93,6 +94,46 @@ pub(crate) async fn handle_admin_command(
             } else {
                 storage_info.render(std::io::stdout())?;
             }
+        }
+        AdminCommands::NetworkMetrics { app_id } => {
+            let network_metrics = if let Some(app_id) = app_id {
+                let dna_hashes = client
+                    .list_apps(Some(AppStatusFilter::Running))
+                    .await?
+                    .into_iter()
+                    .find(|app| app.installed_app_id == app_id)
+                    .map(|app| {
+                        app.cell_info
+                            .values()
+                            .flat_map(|ci| {
+                                ci.iter().filter_map(|ci| match ci {
+                                    CellInfo::Provisioned(cell) => {
+                                        Some(cell.cell_id.dna_hash().clone())
+                                    }
+                                    _ => None,
+                                })
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_else(|| Vec::with_capacity(0));
+
+                let mut out = HashMap::with_capacity(dna_hashes.len());
+                if dna_hashes.is_empty() {
+                    eprintln!("No DNAs found for app: {}", app_id);
+                    return Ok(());
+                } else {
+                    for dna_hash in dna_hashes {
+                        let metrics = client.dump_network_metrics(Some(dna_hash), true).await?;
+                        out.extend(metrics);
+                    }
+                }
+
+                out
+            } else {
+                client.dump_network_metrics(None, true).await?
+            };
+
+            std::io::stdout().write_all(network_metrics.as_human_readable()?.as_bytes())?;
         }
     }
 
