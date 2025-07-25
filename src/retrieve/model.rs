@@ -347,7 +347,7 @@ impl TryFrom<DbAction> for SignedAction {
     }
 }
 
-#[derive(Debug, Queryable, Selectable)]
+#[derive(Debug, Eq, PartialEq, Queryable, Selectable)]
 #[diesel(table_name = crate::retrieve::schema::SliceHash)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct SliceHash {
@@ -355,4 +355,20 @@ pub struct SliceHash {
     pub arc_end: i32,
     pub slice_index: i64,
     pub hash: Vec<u8>,
+}
+
+impl PartialOrd for SliceHash {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for SliceHash {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        if self.slice_index == other.slice_index {
+            return self.arc_start.cmp(&other.arc_start);
+        }
+
+        self.slice_index.cmp(&other.slice_index)
+    }
 }
