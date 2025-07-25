@@ -303,6 +303,16 @@ impl TryFrom<(DbDhtOp, Vec<u8>, Option<Vec<u8>>)> for Record {
     }
 }
 
+pub fn get_slice_hashes(authored: &mut SqliteConnection) -> HcOpsResult<Vec<SliceHash>> {
+    use diesel::prelude::*;
+
+    let loaded = schema::SliceHash::table
+        .select(SliceHash::as_select())
+        .load::<SliceHash>(authored)?;
+
+    Ok(loaded)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

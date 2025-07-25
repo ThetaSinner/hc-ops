@@ -1,10 +1,11 @@
+use crate::render::{Render, SliceHashTable};
 use anyhow::Context;
 use diesel::SqliteConnection;
 use hc_ops::readable::{HumanReadable, HumanReadableDisplay};
 use hc_ops::retrieve::{
     AuthoredMeta, CacheMeta, DbKind, DhtMeta, DhtOp, get_agent_chain, get_all_actions,
-    get_all_dht_ops, get_all_entries, get_pending_ops, list_discovered_agents, load_database_key,
-    open_holochain_database,
+    get_all_dht_ops, get_all_entries, get_pending_ops, get_slice_hashes, list_discovered_agents,
+    load_database_key, open_holochain_database,
 };
 use hc_ops::{HcOpsError, HcOpsResult};
 use holochain_conductor_api::{AppInfo, CellInfo};
@@ -97,6 +98,7 @@ fn run_explorer(
         WhoIsHere,
         AgentChain,
         Pending,
+        SliceHashes,
         Dump,
         Back,
         Exit,
@@ -108,6 +110,7 @@ fn run_explorer(
                 Operation::WhoIsHere => write!(f, "Who is here?"),
                 Operation::AgentChain => write!(f, "View an agent chain"),
                 Operation::Pending => write!(f, "View ops pending validation or integration"),
+                Operation::SliceHashes => write!(f, "View slice hashes"),
                 Operation::Dump => write!(f, "Dump"),
                 Operation::Back => write!(f, ":back"),
                 Operation::Exit => write!(f, ":exit"),
@@ -119,6 +122,7 @@ fn run_explorer(
         Operation::WhoIsHere,
         Operation::AgentChain,
         Operation::Pending,
+        Operation::SliceHashes,
         Operation::Dump,
         Operation::Back,
         Operation::Exit,
@@ -168,6 +172,17 @@ fn run_explorer(
                             .context("Could not convert pending ops")?
                     );
                 }
+            }
+            Operation::SliceHashes => {
+                let mut slice_hashes = get_slice_hashes(dht)?;
+
+                slice_hashes.sort_by_key(|sh| sh.slice_index);
+
+                slice_hashes
+                    .into_iter()
+                    .map(Into::into)
+                    .collect::<Vec<SliceHashTable>>()
+                    .render(std::io::stdout())?
             }
             Operation::Dump => {
                 let out = get_all_dht_ops(authored);

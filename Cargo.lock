@@ -2033,6 +2033,7 @@ dependencies = [
  "holochain_websocket",
  "holochain_zome_types",
  "human_bytes",
+ "kitsune2_api",
  "libc",
  "libsodium-sys-stable",
  "libsqlite3-sys",

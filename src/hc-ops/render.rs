@@ -1,6 +1,9 @@
 use crate::data::{AgentTag, ConductorTag};
+use base64::Engine;
+use hc_ops::retrieve::SliceHash;
 use holochain_conductor_api::{StorageBlob, StorageInfo};
 use holochain_zome_types::prelude::{AgentPubKey, DnaHash};
+use kitsune2_api::DhtArc;
 use std::io;
 use std::io::Write;
 use tabled::settings::Style;
@@ -108,6 +111,26 @@ impl From<ConductorTag> for ConductorTagTable {
             tag: tag.tag,
             address: tag.address,
             port: tag.port,
+        }
+    }
+}
+
+#[derive(Tabled)]
+pub struct SliceHashTable {
+    pub dht_arc: String,
+    pub slice_index: u64,
+    pub hash: String,
+}
+
+impl From<SliceHash> for SliceHashTable {
+    fn from(slice_hash: SliceHash) -> Self {
+        Self {
+            dht_arc: format!(
+                "{:?}",
+                DhtArc::Arc(slice_hash.arc_start as u32, slice_hash.arc_end as u32)
+            ),
+            slice_index: slice_hash.slice_index as u64,
+            hash: base64::prelude::BASE64_STANDARD.encode(slice_hash.hash),
         }
     }
 }

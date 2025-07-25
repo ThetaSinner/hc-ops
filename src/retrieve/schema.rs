@@ -67,3 +67,12 @@ diesel::table! {
 
 joinable!(DhtOp -> Action (action_hash));
 allow_tables_to_appear_in_same_query!(Action, Entry, DhtOp);
+
+diesel::table! {
+    SliceHash (arc_start, arc_end, slice_index) {
+        arc_start -> Int4,
+        arc_end -> Int4,
+        slice_index -> Int8,
+        hash -> Blob,
+    }
+}
