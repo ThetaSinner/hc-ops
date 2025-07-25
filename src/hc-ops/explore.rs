@@ -179,7 +179,7 @@ fn run_explorer(
             Operation::SliceHashes => {
                 let mut slice_hashes = get_slice_hashes(dht)?;
 
-                slice_hashes.sort_by_key(|sh| sh.slice_index);
+                slice_hashes.sort();
 
                 slice_hashes
                     .into_iter()
