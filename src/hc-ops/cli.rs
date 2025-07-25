@@ -149,6 +149,11 @@ pub enum AdminCommands {
         /// Get storage info for a single app
         app_id: Option<String>,
     },
+    /// Get network metrics per DNA.
+    NetworkMetrics {
+        /// Get network metrics for the DNAs of a single app
+        app_id: Option<String>,
+    },
 }
 
 #[derive(Debug, Args)]
