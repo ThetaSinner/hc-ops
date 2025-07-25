@@ -44,6 +44,12 @@
             pkgs.perl
           ];
           doCheck = false;
+
+          meta = {
+            description = "Holochain operations CLI tool";
+            homepage = "https://github.com/ThetaSinner/hc-ops";
+            mainProgram = "hc-ops";
+          };
         };
 
       devShells.default = pkgs.mkShell {
