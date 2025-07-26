@@ -4,8 +4,8 @@ use diesel::SqliteConnection;
 use hc_ops::readable::{HumanReadable, HumanReadableDisplay};
 use hc_ops::retrieve::{
     AuthoredMeta, CacheMeta, DbKind, DhtMeta, DhtOp, get_agent_chain, get_all_actions,
-    get_all_dht_ops, get_all_entries, get_pending_ops, get_slice_hashes, list_discovered_agents,
-    load_database_key, open_holochain_database,
+    get_all_dht_ops, get_all_entries, get_ops_in_slice, get_pending_ops, get_slice_hashes,
+    list_discovered_agents, load_database_key, open_holochain_database,
 };
 use hc_ops::{HcOpsError, HcOpsResult};
 use holochain_conductor_api::{AppInfo, CellInfo};
@@ -99,6 +99,7 @@ fn run_explorer(
         AgentChain,
         Pending,
         SliceHashes,
+        OpsInSlice,
         Dump,
         Back,
         Exit,
@@ -111,6 +112,7 @@ fn run_explorer(
                 Operation::AgentChain => write!(f, "View an agent chain"),
                 Operation::Pending => write!(f, "View ops pending validation or integration"),
                 Operation::SliceHashes => write!(f, "View slice hashes"),
+                Operation::OpsInSlice => write!(f, "View ops in a slice"),
                 Operation::Dump => write!(f, "Dump"),
                 Operation::Back => write!(f, ":back"),
                 Operation::Exit => write!(f, ":exit"),
@@ -123,6 +125,7 @@ fn run_explorer(
         Operation::AgentChain,
         Operation::Pending,
         Operation::SliceHashes,
+        Operation::OpsInSlice,
         Operation::Dump,
         Operation::Back,
         Operation::Exit,
@@ -183,6 +186,29 @@ fn run_explorer(
                     .map(Into::into)
                     .collect::<Vec<SliceHashTable>>()
                     .render(std::io::stdout())?
+            }
+            Operation::OpsInSlice => {
+                let arc_start: u32 = dialoguer::Input::new()
+                    .with_prompt("Enter the arc start")
+                    .interact()?;
+
+                let arc_end: u32 = dialoguer::Input::new()
+                    .with_prompt("Enter the arc end")
+                    .interact()?;
+
+                let slice_index: u64 = dialoguer::Input::new()
+                    .with_prompt("Enter the slice index")
+                    .interact()?;
+
+                let ops = get_ops_in_slice(dht, arc_start, arc_end, slice_index)?;
+
+                if ops.is_empty() {
+                    println!("No ops in slice");
+                } else {
+                    for op in ops {
+                        println!("{op:?} @ {}", op.get_loc());
+                    }
+                }
             }
             Operation::Dump => {
                 let out = get_all_dht_ops(authored);

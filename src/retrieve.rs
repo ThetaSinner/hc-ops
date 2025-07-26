@@ -1,11 +1,14 @@
 use crate::{HcOpsError, HcOpsResult};
-use diesel::{Connection, RunQueryDsl, SqliteConnection};
+use diesel::{Connection, RunQueryDsl, SqliteConnection, sql_query};
 use holochain_types::chain::ChainItem;
-use holochain_types::prelude::{Entry, SignedActionHashedExt};
+use holochain_types::prelude::{DhtOpHash, Entry, SignedActionHashedExt};
 use holochain_zome_types::prelude::{AgentPubKey, DnaHash, SignedActionHashed};
+use kitsune2_api::{Timestamp, UNIX_TIMESTAMP};
+use kitsune2_dht::UNIT_TIME;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
+use std::time::Duration;
 
 mod crypt;
 pub use crypt::*;
@@ -313,6 +316,63 @@ pub fn get_slice_hashes(authored: &mut SqliteConnection) -> HcOpsResult<Vec<Slic
     Ok(loaded)
 }
 
+pub fn get_ops_in_slice(
+    dht: &mut SqliteConnection,
+    arc_start: u32,
+    arc_end: u32,
+    slice_index: u64,
+) -> HcOpsResult<Vec<DhtOpHash>> {
+    use diesel::prelude::*;
+
+    let (time_start, time_end) = time_bounds_for_slice_index(slice_index);
+
+    #[derive(QueryableByName, PartialEq, Debug)]
+    #[diesel(table_name = crate::retrieve::schema::DhtOp)]
+    #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+    struct SizedOps {
+        hash: Vec<u8>,
+        storage_center_loc: Option<i32>,
+        serialized_size: Option<i32>,
+    }
+
+    let mut query = holochain_sqlite::sql::sql_dht::OP_HASHES_IN_TIME_SLICE.to_string();
+    query = query.replace("SELECT", "SELECT storage_center_loc,");
+
+    let rows: Vec<SizedOps> = sql_query(query)
+        .bind::<diesel::sql_types::Integer, _>(arc_start as i32)
+        .bind::<diesel::sql_types::Integer, _>(arc_end as i32)
+        .bind::<diesel::sql_types::BigInt, _>(time_start.as_micros())
+        .bind::<diesel::sql_types::BigInt, _>(time_end.as_micros())
+        .get_results(dht)?;
+
+    println!("Found hashes with locations:");
+    for r in &rows {
+        println!(
+            "{:?} @ {}",
+            DhtOpHash::from_raw_39(r.hash.clone()),
+            r.storage_center_loc.unwrap() as u32
+        );
+    }
+
+    println!("\n\n");
+
+    Ok(rows
+        .into_iter()
+        .map(|o| DhtOpHash::try_from_raw_39(o.hash))
+        .collect::<Result<Vec<_>, _>>()?)
+}
+
+fn time_bounds_for_slice_index(slice_index: u64) -> (Timestamp, Timestamp) {
+    // See [TimePartition::new] in `kitsune2_dht`.
+    let full_slice_duration = Duration::from_secs((1u64 << 9) * UNIT_TIME.as_secs());
+
+    // See [TimePartition::time_bounds_for_full_slice_index] in `kitsune2_dht`.
+    let start = UNIX_TIMESTAMP + Duration::from_secs(slice_index * full_slice_duration.as_secs());
+    let end = start + full_slice_duration;
+
+    (start, end)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -327,7 +387,7 @@ mod tests {
             action: SignedActionHashed::from_content_sync(SignedAction::new(
                 Action::Create(Create {
                     author: AgentPubKey::from_raw_36(vec![i; 36]),
-                    timestamp: Timestamp::now(),
+                    timestamp: holochain_zome_types::prelude::Timestamp::now(),
                     action_seq: i as u32,
                     prev_action: ActionHash::from_raw_36(vec![i + 1; 36]),
                     entry_type: EntryType::AgentPubKey,

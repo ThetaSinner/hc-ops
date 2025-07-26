@@ -22,6 +22,10 @@ diesel::table! {
         num_validation_attempts -> Nullable<Int4>,
         last_validation_attempt -> Nullable<Int8>,
         dependency -> Nullable<Blob>,
+        when_sys_validated -> Nullable<Int4>,
+        when_app_validated -> Nullable<Int4>,
+        when_stored -> Nullable<Int4>,
+        serialized_size -> Nullable<Int4>,
     }
 }
 

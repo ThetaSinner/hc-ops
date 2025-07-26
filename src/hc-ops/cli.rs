@@ -32,6 +32,9 @@ pub enum Commands {
 
     /// Explore Holochain data
     Explore(ExploreArgs),
+
+    /// Compare data from another Holochain conductor
+    Compare(CompareArgs),
 }
 
 #[derive(Debug, Args)]
@@ -197,4 +200,23 @@ pub struct ExploreArgs {
 
     /// The path to the Holochain data directory
     pub data_root_path: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub struct CompareArgs {
+    #[command(subcommand)]
+    pub command: CompareCommands,
+}
+
+/// Compare data from another Holochain conductor.
+#[derive(Debug, Subcommand)]
+pub enum CompareCommands {
+    #[command(arg_required_else_help = true)]
+    SliceHashes {
+        /// A file containing the raw printout from `hc-ops explore slice-hashes`.
+        our_file: PathBuf,
+
+        /// A file containing the raw printout from `hc-ops explore slice-hashes`.
+        their_file: PathBuf,
+    },
 }

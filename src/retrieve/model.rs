@@ -40,6 +40,14 @@ pub struct DbDhtOp {
     // DHT only
     pub last_validation_attempt: Option<i64>,
     pub dependency: Option<Vec<u8>>,
+    // DHT only
+    pub when_sys_validated: Option<i32>,
+    // DHT only
+    pub when_app_validated: Option<i32>,
+    // DHT only
+    pub when_stored: Option<i32>,
+    // DHT only
+    pub serialized_size: Option<i32>,
 }
 
 #[derive(Debug, Copy, Clone, AsExpression, FromSqlRow, Serialize, Deserialize)]
