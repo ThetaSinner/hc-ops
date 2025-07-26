@@ -4,6 +4,7 @@ use crate::cli::conductor_tag::handle_conductor_tag_command;
 use crate::cli::explore::handle_explore_command;
 use crate::cli::init::handle_init_command;
 use crate::cli::{Cli, Commands};
+use crate::compare::handle_compare_command;
 use crate::data::ConductorTag;
 use anyhow::Context;
 use clap::Parser;
@@ -16,6 +17,7 @@ use std::str::FromStr;
 const MIGRATIONS: EmbeddedMigrations = diesel_migrations::embed_migrations!();
 
 mod cli;
+mod compare;
 mod data;
 mod explore;
 mod interactive;
@@ -57,6 +59,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Explore(args) => {
             handle_explore_command(&mut conn, args).await?;
+        }
+        Commands::Compare(args) => {
+            handle_compare_command(args)?;
         }
     }
 
