@@ -157,6 +157,8 @@ pub enum AdminCommands {
         /// Get network metrics for the DNAs of a single app
         app_id: Option<String>,
     },
+    /// Get network stats for the conductor.
+    NetworkStats,
 }
 
 #[derive(Debug, Args)]

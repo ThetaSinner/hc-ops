@@ -7,6 +7,7 @@ use holochain_zome_types::prelude::{
     Action, ActionHash, AgentPubKey, AnyDhtHash, DhtOpHash, DnaHash, Entry, EntryHash,
     SignedAction, SignedActionHashed, Timestamp,
 };
+use kitsune2_api::TransportStats;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
@@ -561,6 +562,53 @@ impl HumanReadable for HashMap<DnaHash, Kitsune2NetworkMetrics> {
 
 impl HumanReadableDisplay for HashMap<DnaHash, Kitsune2NetworkMetrics> {}
 
+impl HumanReadable for TransportStats {
+    fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
+        let mut out: serde_json::Value = serde_json::from_str(&serde_json::to_string(&self)?)?;
+
+        if let Some(connections) = out
+            .as_object_mut()
+            .and_then(|o| o.get_mut("connections"))
+            .and_then(|v| v.as_array_mut())
+        {
+            for connection in connections {
+                if let Some(conn_obj) = connection.as_object_mut() {
+                    if let Some(opened_at) = conn_obj.get_mut("opened_at_s") {
+                        *opened_at = serde_json::Value::String(
+                            Timestamp(
+                                opened_at
+                                    .as_u64()
+                                    .ok_or_else(|| HcOpsError::Other("Invalid timestamp".into()))?
+                                    as i64
+                                    * 1_000_000,
+                            )
+                            .to_string(),
+                        );
+                    }
+
+                    if let Some(recv_bytes) = conn_obj.get("recv_bytes") {
+                        conn_obj.insert("recv".to_string(), transform_bytes_size(recv_bytes)?);
+                        conn_obj.remove("recv_bytes");
+                    }
+
+                    if let Some(send_bytes) = conn_obj.get("send_bytes") {
+                        conn_obj.insert("send".to_string(), transform_bytes_size(send_bytes)?);
+                        conn_obj.remove("send_bytes");
+                    }
+                }
+            }
+        }
+
+        Ok(out)
+    }
+
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
+        self.as_human_readable_raw()
+    }
+}
+
+impl HumanReadableDisplay for TransportStats {}
+
 fn convert_byte_array(from: &[serde_json::Value]) -> HcOpsResult<Vec<u8>> {
     from.iter()
         .map(|v| {
@@ -713,5 +761,15 @@ fn transform_flatten_byte_array(input: &serde_json::Value) -> HcOpsResult<serde_
             .map(|b| b.to_string())
             .collect::<Vec<_>>()
             .join(", ")
+    )))
+}
+
+fn transform_bytes_size(input: &serde_json::Value) -> HcOpsResult<serde_json::Value> {
+    let size = input
+        .as_u64()
+        .ok_or_else(|| HcOpsError::Other("Invalid bytes size".into()))?;
+
+    Ok(serde_json::Value::String(human_bytes::human_bytes(
+        size as f64,
     )))
 }
