@@ -135,6 +135,11 @@ pub(crate) async fn handle_admin_command(
 
             std::io::stdout().write_all(network_metrics.as_human_readable()?.as_bytes())?;
         }
+        AdminCommands::NetworkStats => {
+            let stats = client.dump_network_stats().await?;
+
+            std::io::stdout().write_all(stats.as_human_readable()?.as_bytes())?;
+        }
     }
 
     Ok(())
