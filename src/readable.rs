@@ -674,6 +674,10 @@ fn transform_generic_hash(input: &serde_json::Value) -> HcOpsResult<serde_json::
 }
 
 fn transform_timestamp(input: &serde_json::Value) -> HcOpsResult<serde_json::Value> {
+    if input.is_null() {
+        return Ok(serde_json::Value::Null);
+    }
+
     Ok(serde_json::Value::String(
         Timestamp(
             input
