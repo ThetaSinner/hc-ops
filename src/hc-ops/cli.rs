@@ -159,6 +159,11 @@ pub enum AdminCommands {
     },
     /// Get network stats for the conductor.
     NetworkStats,
+    /// Get the list of agents known to the conductor.
+    ListAgents {
+        /// Get the list of agents for a single app
+        app_id: Option<String>,
+    },
 }
 
 #[derive(Debug, Args)]

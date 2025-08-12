@@ -3,9 +3,12 @@ use crate::connect_admin_client;
 use crate::render::Render;
 use diesel::SqliteConnection;
 use hc_ops::readable::HumanReadableDisplay;
+use holo_hash::DnaHash;
 use holochain_client::InstallAppPayload;
 use holochain_conductor_api::{AppStatusFilter, CellInfo, StorageBlob, StorageInfo};
 use holochain_types::prelude::AppBundleSource;
+use kitsune2_api::AgentInfoSigned;
+use kitsune2_core::Ed25519Verifier;
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -139,6 +142,57 @@ pub(crate) async fn handle_admin_command(
             let stats = client.dump_network_stats().await?;
 
             std::io::stdout().write_all(stats.as_human_readable()?.as_bytes())?;
+        }
+        AdminCommands::ListAgents { app_id } => {
+            let agents = if let Some(app_id) = app_id {
+                let cell_ids = client
+                    .list_apps(Some(AppStatusFilter::Running))
+                    .await?
+                    .into_iter()
+                    .find(|app| app.installed_app_id == app_id)
+                    .map(|app| {
+                        app.cell_info
+                            .values()
+                            .flat_map(|ci| {
+                                ci.iter().filter_map(|ci| match ci {
+                                    CellInfo::Provisioned(cell) => Some(cell.cell_id.clone()),
+                                    _ => None,
+                                })
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_else(|| Vec::with_capacity(0));
+
+                let mut out = HashMap::with_capacity(cell_ids.len());
+                if cell_ids.is_empty() {
+                    eprintln!("No cells found for app: {}", app_id);
+                    return Ok(());
+                } else {
+                    for cell_id in cell_ids {
+                        let agents = client.agent_info(Some(cell_id)).await?;
+                        out.extend(
+                            agents
+                                .into_iter()
+                                .filter_map(|s| {
+                                    AgentInfoSigned::decode(&Ed25519Verifier, s.as_bytes()).ok()
+                                })
+                                .map(|a| (DnaHash::from_k2_space(&a.space), a)),
+                        );
+                    }
+                }
+
+                out
+            } else {
+                client
+                    .agent_info(None)
+                    .await?
+                    .into_iter()
+                    .filter_map(|s| AgentInfoSigned::decode(&Ed25519Verifier, s.as_bytes()).ok())
+                    .map(|a| (DnaHash::from_k2_space(&a.space), a))
+                    .collect()
+            };
+
+            std::io::stdout().write_all(agents.as_human_readable()?.as_bytes())?;
         }
     }
 
