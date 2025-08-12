@@ -7,11 +7,12 @@ use holochain_zome_types::prelude::{
     Action, ActionHash, AgentPubKey, AnyDhtHash, DhtOpHash, DnaHash, Entry, EntryHash,
     SignedAction, SignedActionHashed, Timestamp,
 };
-use kitsune2_api::TransportStats;
+use kitsune2_api::{AgentInfoSigned, TransportStats};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::sync::Arc;
 
 pub trait HumanReadable {
     fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value>;
@@ -544,24 +545,6 @@ impl HumanReadable for Kitsune2NetworkMetrics {
     }
 }
 
-impl HumanReadable for HashMap<DnaHash, Kitsune2NetworkMetrics> {
-    fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
-        let mut out = serde_json::Map::new();
-
-        for (dna_hash, metrics) in self {
-            out.insert(format!("{:?}", dna_hash), metrics.as_human_readable_raw()?);
-        }
-
-        Ok(serde_json::Value::Object(out))
-    }
-
-    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
-        self.as_human_readable_raw()
-    }
-}
-
-impl HumanReadableDisplay for HashMap<DnaHash, Kitsune2NetworkMetrics> {}
-
 impl HumanReadable for TransportStats {
     fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
         let mut out: serde_json::Value = serde_json::from_str(&serde_json::to_string(&self)?)?;
@@ -608,6 +591,86 @@ impl HumanReadable for TransportStats {
 }
 
 impl HumanReadableDisplay for TransportStats {}
+
+impl HumanReadable for AgentInfoSigned {
+    fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
+        let mut value = serde_json::to_value(self.get_agent_info())?;
+
+        if let Some(agent_info) = value.as_object_mut() {
+            if let Some(agent) = agent_info.get_mut("agent") {
+                *agent = serde_json::Value::String(format!(
+                    "{:?}",
+                    AgentPubKey::from_k2_agent(&self.get_agent_info().agent)
+                ));
+            }
+
+            if let Some(space) = agent_info.get_mut("space") {
+                *space = serde_json::Value::String(format!(
+                    "{:?}",
+                    DnaHash::from_k2_space(&self.get_agent_info().space)
+                ));
+            }
+
+            if let Some(created_at) = agent_info.get_mut("createdAt") {
+                *created_at = transform_timestamp_ns(created_at)?;
+            }
+
+            if let Some(expires_at) = agent_info.get_mut("expiresAt") {
+                *expires_at = transform_timestamp_ns(expires_at)?;
+            }
+        }
+
+        Ok(value)
+    }
+
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
+        self.as_human_readable_raw()
+    }
+}
+
+impl HumanReadableDisplay for AgentInfoSigned {}
+
+impl<K, V> HumanReadable for HashMap<K, V>
+where
+    K: Debug,
+    V: HumanReadable,
+{
+    fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
+        let mut out = serde_json::Map::new();
+
+        for (key, value) in self {
+            out.insert(format!("{:?}", key), value.as_human_readable_raw()?);
+        }
+
+        Ok(serde_json::Value::Object(out))
+    }
+
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
+        self.as_human_readable_raw()
+    }
+}
+
+impl<K, V> HumanReadableDisplay for HashMap<K, V>
+where
+    K: Debug,
+    V: HumanReadable,
+{
+}
+
+impl<T> HumanReadable for Arc<T>
+where
+    T: HumanReadable,
+{
+    fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
+        self.as_ref().as_human_readable_raw()
+    }
+
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
+        self.as_ref().as_human_readable_summary_raw()
+    }
+}
+
+impl<T> HumanReadableDisplay for Arc<T> where T: HumanReadable {}
 
 fn convert_byte_array(from: &[serde_json::Value]) -> HcOpsResult<Vec<u8>> {
     from.iter()
@@ -731,6 +794,24 @@ fn transform_timestamp(input: &serde_json::Value) -> HcOpsResult<serde_json::Val
             input
                 .as_u64()
                 .ok_or_else(|| HcOpsError::Other("Invalid timestamp".into()))? as i64,
+        )
+        .to_string(),
+    ))
+}
+
+fn transform_timestamp_ns(input: &serde_json::Value) -> HcOpsResult<serde_json::Value> {
+    if input.is_null() {
+        return Ok(serde_json::Value::Null);
+    }
+
+    Ok(serde_json::Value::String(
+        Timestamp(
+            input
+                .as_str()
+                .ok_or_else(|| HcOpsError::Other("Invalid timestamp".into()))?
+                .parse::<u64>()
+                .map_err(|_| HcOpsError::Other("Invalid timestamp format".into()))?
+                as i64,
         )
         .to_string(),
     ))
