@@ -51,7 +51,6 @@ pub(crate) async fn handle_admin_command(
                     network_seed,
                     roles_settings: None,
                     ignore_genesis_failure: false,
-                    allow_throwaway_random_agent_key: true,
                 })
                 .await?;
 
@@ -101,7 +100,7 @@ pub(crate) async fn handle_admin_command(
         AdminCommands::NetworkMetrics { app_id } => {
             let network_metrics = if let Some(app_id) = app_id {
                 let dna_hashes = client
-                    .list_apps(Some(AppStatusFilter::Running))
+                    .list_apps(Some(AppStatusFilter::Enabled))
                     .await?
                     .into_iter()
                     .find(|app| app.installed_app_id == app_id)
@@ -141,12 +140,12 @@ pub(crate) async fn handle_admin_command(
         AdminCommands::NetworkStats => {
             let stats = client.dump_network_stats().await?;
 
-            std::io::stdout().write_all(stats.as_human_readable()?.as_bytes())?;
+            std::io::stdout().write_all(stats.transport_stats.as_human_readable()?.as_bytes())?;
         }
         AdminCommands::ListAgents { app_id } => {
             let agents = if let Some(app_id) = app_id {
-                let cell_ids = client
-                    .list_apps(Some(AppStatusFilter::Running))
+                let dna_hashes = client
+                    .list_apps(Some(AppStatusFilter::Enabled))
                     .await?
                     .into_iter()
                     .find(|app| app.installed_app_id == app_id)
@@ -155,7 +154,9 @@ pub(crate) async fn handle_admin_command(
                             .values()
                             .flat_map(|ci| {
                                 ci.iter().filter_map(|ci| match ci {
-                                    CellInfo::Provisioned(cell) => Some(cell.cell_id.clone()),
+                                    CellInfo::Provisioned(cell) => {
+                                        Some(cell.cell_id.dna_hash().clone())
+                                    }
                                     _ => None,
                                 })
                             })
@@ -163,13 +164,13 @@ pub(crate) async fn handle_admin_command(
                     })
                     .unwrap_or_else(|| Vec::with_capacity(0));
 
-                let mut out = HashMap::with_capacity(cell_ids.len());
-                if cell_ids.is_empty() {
-                    eprintln!("No cells found for app: {}", app_id);
+                let mut out = HashMap::with_capacity(dna_hashes.len());
+                if dna_hashes.is_empty() {
+                    eprintln!("No DNA hashes found for app: {}", app_id);
                     return Ok(());
                 } else {
-                    for cell_id in cell_ids {
-                        let agents = client.agent_info(Some(cell_id)).await?;
+                    for dna_hash in dna_hashes {
+                        let agents = client.agent_info(Some(vec![dna_hash])).await?;
                         out.extend(
                             agents
                                 .into_iter()

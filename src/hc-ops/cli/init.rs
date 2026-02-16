@@ -8,7 +8,7 @@ use holochain_conductor_api::{AppStatusFilter, CellInfo};
 use holochain_zome_types::capability::GrantedFunctions;
 use holochain_zome_types::init::InitCallbackResult;
 use holochain_zome_types::prelude::{ExternIO, FunctionName, ZomeName};
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 use std::net::IpAddr;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -22,7 +22,7 @@ pub(crate) async fn handle_init_command(
     match args.command {
         InitCommands::Check => {
             let apps = client
-                .list_apps(Some(AppStatusFilter::Running))
+                .list_apps(Some(AppStatusFilter::Enabled))
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to list apps: {e:?}"))?;
 
@@ -98,7 +98,7 @@ pub(crate) async fn handle_init_command(
                                 .interact_text()?;
 
                             // TODO Why does this end up initializing the zomes before we make a call!?
-                            let mut granted = BTreeSet::<(ZomeName, FunctionName)>::new();
+                            let mut granted = HashSet::<(ZomeName, FunctionName)>::new();
                             granted.insert((zome.clone().into(), "init".into()));
                             let creds = client
                                 .authorize_signing_credentials(

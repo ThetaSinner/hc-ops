@@ -16,7 +16,7 @@ fn create(input: CreateTester) -> ExternResult<ActionHash> {
 
 #[hdk_extern]
 fn put_sample_data() -> ExternResult<()> {
-    let mut sample_functions = BTreeSet::new();
+    let mut sample_functions = HashSet::new();
     sample_functions.insert(("fixture".into(), "receive_remote_call".into()));
     create_cap_grant(CapGrantEntry {
         tag: "sample-unrestricted".into(),
@@ -62,7 +62,7 @@ fn put_sample_data() -> ExternResult<()> {
     })?;
 
     let created_link = create_link(created.clone(), deleted.clone(), LinkTypes::A, ())?;
-    delete_link(created_link)?;
+    delete_link(created_link, GetOptions::default())?;
 
     create_link(created, deleted, LinkTypes::B, "a tag")?;
 

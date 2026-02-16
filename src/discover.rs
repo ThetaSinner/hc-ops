@@ -14,14 +14,15 @@
 //!             // We found a Holochain process with an open admin port
 //!             holochain_client::AdminWebsocket::connect(
 //!                 addr,
+//!                 None,
 //!             )
 //!             .await
 //!             .unwrap();
 //!         } else {
 //!             // Could be several reasons for this:
 //!             // - The process is not a Holochain process
-//!             // - The process is a Holochain process but the admin port is not open
-//!             // - The process is a Holochain process but the version does not match the client we're using
+//!             // - The process is a Holochain process, but the admin port is not open
+//!             // - The process is a Holochain process, but the version does not match the client we're using
 //!         }
 //!     } else {
 //!         // Prompt the user or otherwise filter the list of possible processes
