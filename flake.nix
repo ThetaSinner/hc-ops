@@ -3,7 +3,7 @@
 
   inputs = {
     holonix = {
-        url = "github:holochain/holonix?ref=main-0.5";
+        url = "github:holochain/holonix?ref=main-0.6";
     };
 
     nixpkgs.follows = "holonix/nixpkgs";
@@ -59,11 +59,8 @@
           holochain
           hc
           lair-keystore
-          hc-launch
-          hc-scaffold
-          hn-introspect
         ]) ++ (with pkgs; [
-          nodejs_20 # For UI development
+          nodejs_24 # For UI development
           binaryen # For WASM optimisation
           # Add any other packages you need here
         ]);

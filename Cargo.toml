@@ -9,23 +9,23 @@ path = "src/hc-ops/main.rs"
 
 [dependencies]
 clap = "4.5"
-holochain_client = { version = "0.7.1", default-features = false }
-holochain_conductor_api = "0.5.4"
-holochain_types = "0.5.4"
-holochain_zome_types = "0.5.4"
-holochain_sqlite = "0.5.4"
+holochain_client = { version = "0.8.1-rc.2", default-features = false }
+holochain_conductor_api = "0.6.1-rc.2"
+holochain_types = "0.6.1-rc.2"
+holochain_zome_types = "0.6.1-rc.0"
+holochain_sqlite = "0.6.1-rc.1"
 holochain_serialized_bytes = "=0.0.56"
-holo_hash = { version = "0.5.4", features = ["kitsune2"] }
-kitsune2_api = "0.1"
-kitsune2_core = "0.1"
-kitsune2_dht = "0.1"
+holo_hash = { version = "0.6.1-rc.0", features = ["kitsune2"] }
+kitsune2_api = "0.4.0-dev.2"
+kitsune2_core = "0.4.0-dev.2"
+kitsune2_dht = "0.4.0-dev.2"
 thiserror = "2"
 anyhow = "1"
 dialoguer = "0.11"
-tokio = { version = "1.0", features = ["rt-multi-thread"] }
+tokio = { version = "1", features = ["rt-multi-thread"] }
 diesel = { version = "2.2", features = ["sqlite"] }
 diesel_migrations = "2.2"
-libsqlite3-sys = { version = "0.34.0", features = [
+libsqlite3-sys = { version = "0.35.0", features = [
   "bundled-sqlcipher-vendored-openssl",
 ] }
 serde_json = { version = "1", git = "https://github.com/ThetaSinner/json.git", branch = "master" }
@@ -43,15 +43,16 @@ libc = "0.2.170"
 rpassword = "7.3"
 
 proc-ctl = { version = "0.4.1", optional = true }
-holochain_websocket = { version = "0.5.4", optional = true }
+holochain_websocket = { version = "0.6.1-rc.2", optional = true }
 serde = { version = "1.0.203", features = ["derive"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros"] }
 rand = "0.9"
-holochain = { version = "0.5.4", default-features = false, features = [
+holochain = { version = "0.6.1-rc.2", default-features = false, features = [
   "sweettest",
   "wasmer_sys",
+  "transport-iroh",
 ] }
 
 fixture_types = { path = "fixture/fixture_types" }

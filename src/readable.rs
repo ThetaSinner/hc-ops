@@ -157,10 +157,10 @@ impl<S: Debug + Serialize + DeserializeOwned> HumanReadable for DhtOp<S> {
         replace_field(&mut dht_op, "action_hash", transform_action_hash)?;
         replace_field(&mut dht_op, "authored_timestamp", transform_timestamp)?;
 
-        if let Some(meta) = dht_op.get_mut("meta").and_then(|v| v.as_object_mut()) {
-            if let Some(last_validation_attempt) = meta.get("last_validation_attempt") {
-                meta["last_validation_attempt"] = transform_timestamp(last_validation_attempt)?;
-            }
+        if let Some(meta) = dht_op.get_mut("meta").and_then(|v| v.as_object_mut())
+            && let Some(last_validation_attempt) = meta.get("last_validation_attempt")
+        {
+            meta["last_validation_attempt"] = transform_timestamp(last_validation_attempt)?;
         }
 
         Ok(dht_op)
@@ -286,10 +286,10 @@ impl HumanReadable for SignedAction {
             .and_then(|v| v.get_mut("data"))
             .ok_or_else(|| HcOpsError::Other("Unexpected signed action structure".into()))?;
 
-        if let Some(action) = action.as_object_mut() {
-            if action.contains_key("weight") {
-                action.remove("weight");
-            }
+        if let Some(action) = action.as_object_mut()
+            && action.contains_key("weight")
+        {
+            action.remove("weight");
         }
 
         signed_action
@@ -528,10 +528,10 @@ impl HumanReadable for Kitsune2NetworkMetrics {
                 .and_then(|v| v.as_array_mut())
             {
                 for agent in local_agents {
-                    if let Some(agent) = agent.as_object_mut() {
-                        if let Some(agent) = agent.get_mut("agent") {
-                            *agent = transform_agent_pub_key(agent)?;
-                        }
+                    if let Some(agent) = agent.as_object_mut()
+                        && let Some(agent) = agent.get_mut("agent")
+                    {
+                        *agent = transform_agent_pub_key(agent)?;
                     }
                 }
             }

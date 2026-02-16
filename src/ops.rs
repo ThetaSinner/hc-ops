@@ -107,7 +107,7 @@ impl AdminWebsocketExt for holochain_client::AdminWebsocket {
             let use_port = match selected_interface {
                 Some(i) => i.port,
                 None => this
-                    .attach_app_interface(0, origin.to_string().into(), None)
+                    .attach_app_interface(0, None, origin.to_string().into(), None)
                     .await
                     .map_err(HcOpsError::client)?,
             };
@@ -123,6 +123,7 @@ impl AdminWebsocketExt for holochain_client::AdminWebsocket {
                 (addr, use_port),
                 token_response.token,
                 signer,
+                Some(origin),
             )
             .await
             .map_err(|e| {

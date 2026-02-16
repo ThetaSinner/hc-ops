@@ -8,8 +8,8 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace.dependencies]
-hdi = "=0.6.4"
-hdk = "=0.5.4"
+hdi = "=0.7.1-rc.0"
+hdk = "=0.6.1-rc.0"
 holochain_serialized_bytes = "*"
 serde = "1"
 

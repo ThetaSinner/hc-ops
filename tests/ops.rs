@@ -19,7 +19,6 @@ async fn check_app_init() {
             network_seed: None,
             roles_settings: None,
             ignore_genesis_failure: false,
-            allow_throwaway_random_agent_key: false,
         })
         .await
         .unwrap();
@@ -47,10 +46,13 @@ async fn check_app_init() {
         _ => panic!("Cell not provisioned"),
     };
 
-    let client = holochain_client::AdminWebsocket::connect((
-        Ipv4Addr::LOCALHOST,
-        conductor.get_arbitrary_admin_websocket_port().unwrap(),
-    ))
+    let client = holochain_client::AdminWebsocket::connect(
+        (
+            Ipv4Addr::LOCALHOST,
+            conductor.get_arbitrary_admin_websocket_port().unwrap(),
+        ),
+        None,
+    )
     .await
     .unwrap();
 

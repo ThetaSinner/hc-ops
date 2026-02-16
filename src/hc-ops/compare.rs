@@ -98,18 +98,18 @@ fn compare_slice_hash_files(
     let common_keys = our_keys.intersection(their_keys).collect::<Vec<_>>();
 
     for key in common_keys {
-        if let (Some(oh1), Some(oh2)) = (our_diffable.get(*key), their_diffable.get(*key)) {
-            if oh1.hash != oh2.hash {
-                diff_table.push(SliceHashDiffTable {
-                    dht_arc: format!("{:?}", (oh1.arc_start as u32)..(oh1.arc_end as u32)),
-                    slice_index: oh1.slice_index as u64,
-                    diff: format!(
-                        "Different hashes: our hash = {}, their hash = {}",
-                        base64::prelude::BASE64_STANDARD.encode(&oh1.hash),
-                        base64::prelude::BASE64_STANDARD.encode(&oh2.hash)
-                    ),
-                });
-            }
+        if let (Some(oh1), Some(oh2)) = (our_diffable.get(*key), their_diffable.get(*key))
+            && oh1.hash != oh2.hash
+        {
+            diff_table.push(SliceHashDiffTable {
+                dht_arc: format!("{:?}", (oh1.arc_start as u32)..(oh1.arc_end as u32)),
+                slice_index: oh1.slice_index as u64,
+                diff: format!(
+                    "Different hashes: our hash = {}, their hash = {}",
+                    base64::prelude::BASE64_STANDARD.encode(&oh1.hash),
+                    base64::prelude::BASE64_STANDARD.encode(&oh2.hash)
+                ),
+            });
         }
     }
 
