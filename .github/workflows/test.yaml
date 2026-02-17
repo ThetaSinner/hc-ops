@@ -10,11 +10,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
-          tool: holochain_cli@0.5.4
+          tool: holochain_cli@0.6.1-rc.2
       - name: Package fixture
         run: |
           ./fixture/package.sh
