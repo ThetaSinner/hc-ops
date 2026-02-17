@@ -1,5 +1,6 @@
 use crate::{HcOpsError, HcOpsResult};
 use diesel::{Connection, RunQueryDsl, SqliteConnection, sql_query};
+use holo_hash::{ActionHash, EntryHash};
 use holochain_types::chain::ChainItem;
 use holochain_types::prelude::{DhtOpHash, Entry, SignedActionHashedExt};
 use holochain_zome_types::prelude::{AgentPubKey, DnaHash, SignedActionHashed};
@@ -9,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
 use std::time::Duration;
-use holo_hash::{ActionHash, EntryHash};
 
 mod crypt;
 pub use crypt::*;
@@ -78,7 +78,10 @@ pub fn get_all_actions(conn: &mut SqliteConnection) -> Vec<DbAction> {
 /// Get all DHT ops for a given action hash.
 ///
 /// This will return all ops for the action, including those that have not yet been integrated into the DHT (i.e. those with `when_integrated` set to null).
-pub fn get_ops_by_action_hash(conn: &mut SqliteConnection, action_hash: &ActionHash) -> HcOpsResult<Vec<DbDhtOp>> {
+pub fn get_ops_by_action_hash(
+    conn: &mut SqliteConnection,
+    action_hash: &ActionHash,
+) -> HcOpsResult<Vec<DbDhtOp>> {
     use diesel::prelude::*;
     use schema::DhtOp::dsl as dht_op_fields;
 
@@ -97,12 +100,19 @@ pub fn get_all_entries(conn: &mut SqliteConnection) -> Vec<DbEntry> {
 /// Get all DHT ops for a given entry hash.
 ///
 /// This will return all ops for the entry, including those that have not yet been integrated into the DHT (i.e. those with `when_integrated` set to null).
-pub fn get_ops_by_entry_hash(conn: &mut SqliteConnection, hash: &EntryHash) -> HcOpsResult<Vec<DbDhtOp>> {
+pub fn get_ops_by_entry_hash(
+    conn: &mut SqliteConnection,
+    hash: &EntryHash,
+) -> HcOpsResult<Vec<DbDhtOp>> {
     use diesel::prelude::*;
     use schema::DhtOp::dsl as dht_op_fields;
 
     let loaded = schema::DhtOp::table
-        .inner_join(schema::Action::table.on(dht_op_fields::action_hash.assume_not_null().eq(schema::Action::dsl::hash)))
+        .inner_join(
+            schema::Action::table.on(dht_op_fields::action_hash
+                .assume_not_null()
+                .eq(schema::Action::dsl::hash)),
+        )
         .filter(schema::Action::entry_hash.eq(hash.get_raw_39()))
         .select(DbDhtOp::as_select())
         .load(conn)?;
@@ -168,17 +178,43 @@ pub struct ChainRecord {
     pub entry: Option<Entry>,
 }
 
+/// Get the full chain from the agent using the given authored database connection.
+pub fn get_self_agent_chain(authored_conn: &mut SqliteConnection) -> HcOpsResult<Vec<ChainRecord>> {
+    use diesel::prelude::*;
+    use schema::Action::dsl as action_fields;
+    use schema::Entry::dsl as entry_fields;
+
+    let loaded = schema::Action::table
+        .left_join(
+            schema::Entry::table.on(action_fields::entry_hash
+                .assume_not_null()
+                .eq(entry_fields::hash)),
+        )
+        .select((DbAction::as_select(), entry_fields::blob.nullable()))
+        .order_by(action_fields::seq)
+        .load::<(DbAction, Option<Vec<u8>>)>(authored_conn)?;
+
+    let chain: Vec<ChainRecord> = loaded
+        .into_iter()
+        .map(|l| (l.0, ValidationStatus::Valid, l.1).try_into())
+        .collect::<HcOpsResult<Vec<_>>>()?;
+
+    Ok(chain)
+}
+
 pub fn get_agent_chain(
     dht_conn: &mut SqliteConnection,
-    cache_conn: &mut SqliteConnection,
+    cache_conn: Option<&mut SqliteConnection>,
     agent_pub_key: &AgentPubKey,
 ) -> HcOpsResult<Vec<ChainRecord>> {
     let mut chain = get_dht_agent_chain(dht_conn, agent_pub_key)?;
 
-    let cache_chain = get_cache_agent_chain(cache_conn, agent_pub_key)?;
+    if let Some(cache_conn) = cache_conn {
+        let cache_chain = get_cache_agent_chain(cache_conn, agent_pub_key)?;
 
-    for record in cache_chain {
-        merge_into_chain(&mut chain, record);
+        for record in cache_chain {
+            merge_into_chain(&mut chain, record);
+        }
     }
 
     Ok(chain)

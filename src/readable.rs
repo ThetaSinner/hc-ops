@@ -1,6 +1,7 @@
-use crate::retrieve::{ChainRecord, ChainOp, Record};
+use crate::retrieve::{ChainOp, ChainRecord, Record};
 use crate::{HcOpsError, HcOpsResult, HcOpsResultContextExt};
 use base64::Engine;
+use holo_hash::WarrantHash;
 use holochain_conductor_api::AppInfo;
 use holochain_types::network::Kitsune2NetworkMetrics;
 use holochain_zome_types::prelude::{
@@ -13,7 +14,6 @@ use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
-use holo_hash::WarrantHash;
 
 pub trait HumanReadable {
     fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value>;
