@@ -2,7 +2,7 @@ use hdi::prelude::*;
 
 #[hdk_entry_helper]
 pub struct Tester {
-    pub name: String
+    pub name: String,
 }
 
 #[hdk_entry_types]

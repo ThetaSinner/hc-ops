@@ -21,11 +21,13 @@ diesel::table! {
         validation_stage -> Nullable<Int2>,
         num_validation_attempts -> Nullable<Int4>,
         last_validation_attempt -> Nullable<Int8>,
-        dependency -> Nullable<Blob>,
         when_sys_validated -> Nullable<Int4>,
         when_app_validated -> Nullable<Int4>,
         when_stored -> Nullable<Int4>,
         serialized_size -> Nullable<Int4>,
+        transfer_source -> Nullable<Blob>,
+        transfer_method -> Nullable<Int4>,
+        transfer_time -> Nullable<Int8>,
     }
 }
 
@@ -70,7 +72,22 @@ diesel::table! {
 }
 
 joinable!(DhtOp -> Action (action_hash));
-allow_tables_to_appear_in_same_query!(Action, Entry, DhtOp);
+
+diesel::table! {
+    Warrant (hash) {
+        hash -> Blob,
+        author -> Blob,
+        timestamp -> Int8,
+        warrantee -> Blob,
+        #[sql_name = "type"]
+        typ -> Text,
+        blob -> Blob,
+    }
+}
+
+joinable!(DhtOp -> Warrant (hash));
+
+allow_tables_to_appear_in_same_query!(Action, Entry, DhtOp, Warrant);
 
 diesel::table! {
     SliceHash (arc_start, arc_end, slice_index) {

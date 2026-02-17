@@ -1,4 +1,4 @@
-use crate::retrieve::{ChainRecord, DhtOp, Record};
+use crate::retrieve::{ChainRecord, ChainOp, Record};
 use crate::{HcOpsError, HcOpsResult, HcOpsResultContextExt};
 use base64::Engine;
 use holochain_conductor_api::AppInfo;
@@ -13,6 +13,7 @@ use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
+use holo_hash::WarrantHash;
 
 pub trait HumanReadable {
     fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value>;
@@ -148,13 +149,13 @@ impl HumanReadable for AppInfo {
     }
 }
 
-impl<S: Debug + Serialize + DeserializeOwned> HumanReadable for DhtOp<S> {
+impl<S: Debug + Serialize + DeserializeOwned> HumanReadable for ChainOp<S> {
     fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
         let mut dht_op: serde_json::Value = serde_json::from_str(&serde_json::to_string(&self)?)?;
 
         replace_field(&mut dht_op, "hash", transform_dht_op_hash)?;
         replace_field(&mut dht_op, "basis_hash", transform_any_linkable_hash)?;
-        replace_field(&mut dht_op, "action_hash", transform_action_hash)?;
+        replace_field(&mut dht_op, "action_hash", transform_action_or_warrant_hash)?;
         replace_field(&mut dht_op, "authored_timestamp", transform_timestamp)?;
 
         if let Some(meta) = dht_op.get_mut("meta").and_then(|v| v.as_object_mut())
@@ -759,6 +760,24 @@ fn transform_action_hash(input: &serde_json::Value) -> HcOpsResult<serde_json::V
         "{:?}",
         ActionHash::try_from_raw_39(convert_byte_array(input.as_array().ok_or_else(|| {
             HcOpsError::Other("Cannot convert to an action hash, not an array".into())
+        })?)?)
+        .map_err(HcOpsError::other)?
+    )))
+}
+
+fn transform_action_or_warrant_hash(input: &serde_json::Value) -> HcOpsResult<serde_json::Value> {
+    // Try as an action hash first, if that fails, try as a warrant hash
+    match transform_action_hash(input) {
+        Ok(hash) => Ok(hash),
+        Err(_) => transform_warrant_hash(input),
+    }
+}
+
+fn transform_warrant_hash(input: &serde_json::Value) -> HcOpsResult<serde_json::Value> {
+    Ok(serde_json::Value::String(format!(
+        "{:?}",
+        WarrantHash::try_from_raw_39(convert_byte_array(input.as_array().ok_or_else(|| {
+            HcOpsError::Other("Cannot convert to a warrant hash, not an array".into())
         })?)?)
         .map_err(HcOpsError::other)?
     )))
