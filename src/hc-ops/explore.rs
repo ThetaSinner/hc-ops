@@ -2,16 +2,13 @@ use crate::render::{Render, SliceHashTable};
 use anyhow::Context;
 use diesel::SqliteConnection;
 use hc_ops::readable::{HumanReadable, HumanReadableDisplay};
-use hc_ops::retrieve::{
-    AuthoredMeta, CacheMeta, DbKind, DhtMeta, DhtOp, get_agent_chain, get_all_actions,
-    get_all_dht_ops, get_all_entries, get_ops_in_slice, get_pending_ops, get_slice_hashes,
-    list_discovered_agents, load_database_key, open_holochain_database,
-};
+use hc_ops::retrieve::{AuthoredMeta, CacheMeta, DbKind, DhtMeta, ChainOp, get_agent_chain, get_all_actions, get_all_dht_ops, get_all_entries, get_ops_in_slice, get_pending_ops, get_slice_hashes, list_discovered_agents, load_database_key, open_holochain_database, get_ops_by_action_hash, get_ops_by_entry_hash};
 use hc_ops::{HcOpsError, HcOpsResult};
 use holochain_conductor_api::{AppInfo, CellInfo};
 use holochain_zome_types::prelude::{AgentPubKey, AgentPubKeyB64, DnaHash, Entry, SignedAction};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
+use holo_hash::{ActionHash, ActionHashB64};
 
 pub trait AsAnyhowPretty<T> {
     fn into_anyhow(self) -> anyhow::Result<T>;
@@ -98,6 +95,8 @@ fn run_explorer(
         WhoIsHere,
         AgentChain,
         Pending,
+        FindOpsByActionHash,
+        FindOpsByEntryHash,
         SliceHashes,
         OpsInSlice,
         Dump,
@@ -111,6 +110,8 @@ fn run_explorer(
                 Operation::WhoIsHere => write!(f, "Who is here?"),
                 Operation::AgentChain => write!(f, "View an agent chain"),
                 Operation::Pending => write!(f, "View ops pending validation or integration"),
+                Operation::FindOpsByActionHash => write!(f, "View ops by action hash"),
+                Operation::FindOpsByEntryHash => write!(f, "View ops by entry hash"),
                 Operation::SliceHashes => write!(f, "View slice hashes"),
                 Operation::OpsInSlice => write!(f, "View ops in a slice"),
                 Operation::Dump => write!(f, "Dump"),
@@ -124,6 +125,8 @@ fn run_explorer(
         Operation::WhoIsHere,
         Operation::AgentChain,
         Operation::Pending,
+        Operation::FindOpsByActionHash,
+        Operation::FindOpsByEntryHash,
         Operation::SliceHashes,
         Operation::OpsInSlice,
         Operation::Dump,
@@ -176,6 +179,52 @@ fn run_explorer(
                     );
                 }
             }
+            Operation::FindOpsByActionHash => {
+                let hash: String = dialoguer::Input::new()
+                    .with_prompt("Enter the action hash")
+                    .interact()?;
+
+                let hash: ActionHash = ActionHashB64::from_b64_str(&hash)
+                    .context("Invalid action hash, must be a 39 character base64 string")?.into();
+
+                let ops = get_ops_by_action_hash(dht, &hash)?
+                        .into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<HcOpsResult<Vec<ChainOp<DhtMeta>>>>()?;
+
+                if ops.is_empty() {
+                    println!("No ops found for action hash: {}", hash);
+                } else {
+                    println!(
+                        "Ops for action hash {}: {}",
+                        hash,
+                        ops.as_human_readable_pretty()?
+                    );
+                }
+            }
+            Operation::FindOpsByEntryHash => {
+                let hash: String = dialoguer::Input::new()
+                    .with_prompt("Enter the entry hash")
+                    .interact()?;
+
+                let hash: holo_hash::EntryHash = holo_hash::EntryHashB64::from_b64_str(&hash)
+                    .context("Invalid entry hash, must be a 39 character base64 string")?.into();
+
+                let ops = get_ops_by_entry_hash(dht, &hash)?
+                        .into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<HcOpsResult<Vec<ChainOp<DhtMeta>>>>()?;
+
+                if ops.is_empty() {
+                    println!("No ops found for entry hash: {}", hash);
+                } else {
+                    println!(
+                        "Ops for entry hash {}: {}",
+                        hash,
+                        ops.as_human_readable_pretty()?
+                    );
+                }
+            }
             Operation::SliceHashes => {
                 let mut slice_hashes = get_slice_hashes(dht)?;
 
@@ -216,7 +265,7 @@ fn run_explorer(
                     "Authored ops: {}\n\n",
                     out.into_iter()
                         .map(TryInto::try_into)
-                        .collect::<HcOpsResult<Vec<DhtOp<AuthoredMeta>>>>()?
+                        .collect::<HcOpsResult<Vec<ChainOp<AuthoredMeta>>>>()?
                         .as_human_readable_pretty()
                         .context("Could not convert authored ops")?
                 );
@@ -247,7 +296,7 @@ fn run_explorer(
                     serde_json::to_string_pretty(
                         &out.into_iter()
                             .map(TryInto::try_into)
-                            .collect::<HcOpsResult<Vec<DhtOp<DhtMeta>>>>()?
+                            .collect::<HcOpsResult<Vec<ChainOp<DhtMeta>>>>()?
                             .as_human_readable_raw()?
                     )?
                 );
@@ -266,7 +315,7 @@ fn run_explorer(
                     "Cache ops: {}\n\n",
                     out.into_iter()
                         .map(TryInto::try_into)
-                        .collect::<HcOpsResult<Vec<DhtOp<CacheMeta>>>>()?
+                        .collect::<HcOpsResult<Vec<ChainOp<CacheMeta>>>>()?
                         .as_human_readable_pretty()?
                 );
 

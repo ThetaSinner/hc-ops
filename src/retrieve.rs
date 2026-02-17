@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
 use std::time::Duration;
+use holo_hash::{ActionHash, EntryHash};
 
 mod crypt;
 pub use crypt::*;
@@ -74,8 +75,39 @@ pub fn get_all_actions(conn: &mut SqliteConnection) -> Vec<DbAction> {
     schema::Action::table.load(conn).unwrap()
 }
 
+/// Get all DHT ops for a given action hash.
+///
+/// This will return all ops for the action, including those that have not yet been integrated into the DHT (i.e. those with `when_integrated` set to null).
+pub fn get_ops_by_action_hash(conn: &mut SqliteConnection, action_hash: &ActionHash) -> HcOpsResult<Vec<DbDhtOp>> {
+    use diesel::prelude::*;
+    use schema::DhtOp::dsl as dht_op_fields;
+
+    let loaded = schema::DhtOp::table
+        .filter(dht_op_fields::action_hash.eq(action_hash.get_raw_39()))
+        .select(DbDhtOp::as_select())
+        .load(conn)?;
+
+    Ok(loaded)
+}
+
 pub fn get_all_entries(conn: &mut SqliteConnection) -> Vec<DbEntry> {
     schema::Entry::table.load(conn).unwrap()
+}
+
+/// Get all DHT ops for a given entry hash.
+///
+/// This will return all ops for the entry, including those that have not yet been integrated into the DHT (i.e. those with `when_integrated` set to null).
+pub fn get_ops_by_entry_hash(conn: &mut SqliteConnection, hash: &EntryHash) -> HcOpsResult<Vec<DbDhtOp>> {
+    use diesel::prelude::*;
+    use schema::DhtOp::dsl as dht_op_fields;
+
+    let loaded = schema::DhtOp::table
+        .inner_join(schema::Action::table.on(dht_op_fields::action_hash.assume_not_null().eq(schema::Action::dsl::hash)))
+        .filter(schema::Action::entry_hash.eq(hash.get_raw_39()))
+        .select(DbDhtOp::as_select())
+        .load(conn)?;
+
+    Ok(loaded)
 }
 
 /// Check the DHT and cache databases for `AgentValidationPkg` actions.
@@ -256,7 +288,7 @@ impl TryFrom<(DbAction, ValidationStatus, Option<Vec<u8>>)> for ChainRecord {
 }
 
 pub struct Record {
-    pub dht_op: DhtOp<DhtMeta>,
+    pub dht_op: ChainOp<DhtMeta>,
     pub action: SignedActionHashed,
     pub entry: Option<Entry>,
 }

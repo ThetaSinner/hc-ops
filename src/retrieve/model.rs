@@ -5,19 +5,34 @@ use diesel::prelude::*;
 use diesel::serialize::{Output, ToSql};
 use diesel::sql_types::{SmallInt, Text};
 use diesel::{AsExpression, FromSqlRow};
+use holochain_zome_types::prelude::{AnyLinkableHash, DhtOpHash, SignedAction, SignedWarrant, Timestamp};
 use holochain_zome_types::Entry;
-use holochain_zome_types::prelude::{
-    ActionHash, AnyLinkableHash, DhtOpHash, SignedAction, Timestamp,
-};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
+
+pub enum DhtOp {
+    ChainOp(DbDhtOp),
+    WarrantOp(DbWarrant),
+}
+
+impl From<DbDhtOp> for DhtOp {
+    fn from(value: DbDhtOp) -> Self {
+        DhtOp::ChainOp(value)
+    }
+}
+
+impl From<DbWarrant> for DhtOp {
+    fn from(value: DbWarrant) -> Self {
+        DhtOp::WarrantOp(value)
+    }
+}
 
 #[derive(Debug, Queryable, Selectable)]
 #[diesel(table_name = crate::retrieve::schema::DhtOp)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct DbDhtOp {
     pub hash: Vec<u8>,
-    pub typ: Option<DhtOpType>,
+    pub typ: Option<DbOpType>,
     pub basis_hash: Option<Vec<u8>>,
     pub action_hash: Option<Vec<u8>>,
     // DHT only
@@ -39,7 +54,6 @@ pub struct DbDhtOp {
     pub num_validation_attempts: Option<i32>,
     // DHT only
     pub last_validation_attempt: Option<i64>,
-    pub dependency: Option<Vec<u8>>,
     // DHT only
     pub when_sys_validated: Option<i32>,
     // DHT only
@@ -48,11 +62,17 @@ pub struct DbDhtOp {
     pub when_stored: Option<i32>,
     // DHT only
     pub serialized_size: Option<i32>,
+    // DHT only
+    pub transfer_source: Option<Vec<u8>>,
+    // DHT only
+    pub transfer_method: Option<i32>,
+    // DHT only
+    pub transfer_time: Option<i64>,
 }
 
 #[derive(Debug, Copy, Clone, AsExpression, FromSqlRow, Serialize, Deserialize)]
 #[diesel(sql_type = Text)]
-pub enum DhtOpType {
+pub enum DbOpType {
     StoreRecord,
     StoreEntry,
     RegisterAgentActivity,
@@ -62,24 +82,26 @@ pub enum DhtOpType {
     RegisterDeletedEntryAction,
     RegisterAddLink,
     RegisterRemoveLink,
+    ChainIntegrityWarrant
 }
 
-impl<DB: Backend> FromSql<Text, DB> for DhtOpType
+impl<DB: Backend> FromSql<Text, DB> for DbOpType
 where
     String: FromSql<Text, DB>,
 {
     fn from_sql(bytes: DB::RawValue<'_>) -> diesel::deserialize::Result<Self> {
         let v = String::from_sql(bytes)?;
         Ok(match v.as_str() {
-            "StoreRecord" => DhtOpType::StoreRecord,
-            "StoreEntry" => DhtOpType::StoreEntry,
-            "RegisterAgentActivity" => DhtOpType::RegisterAgentActivity,
-            "RegisterUpdatedContent" => DhtOpType::RegisterUpdatedContent,
-            "RegisterUpdatedRecord" => DhtOpType::RegisterUpdatedRecord,
-            "RegisterDeletedBy" => DhtOpType::RegisterDeletedBy,
-            "RegisterDeletedEntryAction" => DhtOpType::RegisterDeletedEntryAction,
-            "RegisterAddLink" => DhtOpType::RegisterAddLink,
-            "RegisterRemoveLink" => DhtOpType::RegisterRemoveLink,
+            "StoreRecord" => DbOpType::StoreRecord,
+            "StoreEntry" => DbOpType::StoreEntry,
+            "RegisterAgentActivity" => DbOpType::RegisterAgentActivity,
+            "RegisterUpdatedContent" => DbOpType::RegisterUpdatedContent,
+            "RegisterUpdatedRecord" => DbOpType::RegisterUpdatedRecord,
+            "RegisterDeletedBy" => DbOpType::RegisterDeletedBy,
+            "RegisterDeletedEntryAction" => DbOpType::RegisterDeletedEntryAction,
+            "RegisterAddLink" => DbOpType::RegisterAddLink,
+            "RegisterRemoveLink" => DbOpType::RegisterRemoveLink,
+            "ChainIntegrityWarrant" => DbOpType::ChainIntegrityWarrant,
             typ => return Err(format!("Unknown DhtOpType: {typ}").into()),
         })
     }
@@ -176,25 +198,25 @@ pub struct AuthoredMeta {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct DhtOp<Meta = ()>
+pub struct ChainOp<Meta = ()>
 where
     Meta: Debug,
 {
     pub hash: DhtOpHash,
-    pub typ: DhtOpType,
+    pub typ: DbOpType,
     pub basis_hash: AnyLinkableHash,
-    pub action_hash: ActionHash,
+    pub action_hash: Vec<u8>,
     pub storage_center_loc: u32,
     pub authored_timestamp: Timestamp,
     pub validation_status: Option<ValidationStatus>,
     pub meta: Meta,
 }
 
-impl TryFrom<DbDhtOp> for DhtOp {
+impl TryFrom<DbDhtOp> for ChainOp {
     type Error = HcOpsError;
 
     fn try_from(value: DbDhtOp) -> HcOpsResult<Self> {
-        Ok(DhtOp {
+        Ok(ChainOp {
             hash: DhtOpHash::try_from_raw_39(value.hash)?,
             typ: value
                 .typ
@@ -204,11 +226,9 @@ impl TryFrom<DbDhtOp> for DhtOp {
                     .basis_hash
                     .ok_or_else(|| HcOpsError::Other("No basis hash stored".into()))?,
             )?,
-            action_hash: ActionHash::try_from_raw_39(
-                value
-                    .action_hash
-                    .ok_or_else(|| HcOpsError::Other("No action hash stored".into()))?,
-            )?,
+            action_hash: value
+                .action_hash
+                .ok_or_else(|| HcOpsError::Other("No action hash stored".into()))?,
             storage_center_loc: value
                 .storage_center_loc
                 .ok_or_else(|| HcOpsError::Other("Missing storage center location".into()))?
@@ -223,7 +243,7 @@ impl TryFrom<DbDhtOp> for DhtOp {
     }
 }
 
-impl TryFrom<DbDhtOp> for DhtOp<DhtMeta> {
+impl TryFrom<DbDhtOp> for ChainOp<DhtMeta> {
     type Error = HcOpsError;
 
     fn try_from(value: DbDhtOp) -> HcOpsResult<Self> {
@@ -235,9 +255,9 @@ impl TryFrom<DbDhtOp> for DhtOp<DhtMeta> {
             last_validation_attempt: value.last_validation_attempt.map(Timestamp),
         };
 
-        let common: DhtOp = value.try_into()?;
+        let common: ChainOp = value.try_into()?;
 
-        Ok(DhtOp {
+        Ok(ChainOp {
             hash: common.hash,
             typ: common.typ,
             basis_hash: common.basis_hash,
@@ -250,15 +270,15 @@ impl TryFrom<DbDhtOp> for DhtOp<DhtMeta> {
     }
 }
 
-impl TryFrom<DbDhtOp> for DhtOp<CacheMeta> {
+impl TryFrom<DbDhtOp> for ChainOp<CacheMeta> {
     type Error = HcOpsError;
 
     fn try_from(value: DbDhtOp) -> HcOpsResult<Self> {
         let cache_meta = CacheMeta {};
 
-        let common: DhtOp = value.try_into()?;
+        let common: ChainOp = value.try_into()?;
 
-        Ok(DhtOp {
+        Ok(ChainOp {
             hash: common.hash,
             typ: common.typ,
             basis_hash: common.basis_hash,
@@ -271,7 +291,7 @@ impl TryFrom<DbDhtOp> for DhtOp<CacheMeta> {
     }
 }
 
-impl TryFrom<DbDhtOp> for DhtOp<AuthoredMeta> {
+impl TryFrom<DbDhtOp> for ChainOp<AuthoredMeta> {
     type Error = HcOpsError;
 
     fn try_from(value: DbDhtOp) -> HcOpsResult<Self> {
@@ -281,9 +301,9 @@ impl TryFrom<DbDhtOp> for DhtOp<AuthoredMeta> {
             last_publish_time: value.last_publish_time.map(Timestamp),
         };
 
-        let common: DhtOp = value.try_into()?;
+        let common: ChainOp = value.try_into()?;
 
-        Ok(DhtOp {
+        Ok(ChainOp {
             hash: common.hash,
             typ: common.typ,
             basis_hash: common.basis_hash,
@@ -351,6 +371,26 @@ impl TryFrom<DbAction> for SignedAction {
     type Error = HcOpsError;
 
     fn try_from(value: DbAction) -> HcOpsResult<Self> {
+        Ok(holochain_serialized_bytes::decode(value.blob.as_slice())?)
+    }
+}
+
+#[derive(Debug, Queryable, Selectable)]
+#[diesel(table_name = crate::retrieve::schema::Warrant)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct DbWarrant {
+    pub hash: Vec<u8>,
+    pub author: Vec<u8>,
+    pub timestamp: i64,
+    pub warrantee: Vec<u8>,
+    pub typ: String,
+    pub blob: Vec<u8>,
+}
+
+impl TryFrom<DbWarrant> for SignedWarrant {
+    type Error = HcOpsError;
+
+    fn try_from(value: DbWarrant) -> Result<Self, Self::Error> {
         Ok(holochain_serialized_bytes::decode(value.blob.as_slice())?)
     }
 }
