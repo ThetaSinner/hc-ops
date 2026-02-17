@@ -5,8 +5,10 @@ use diesel::prelude::*;
 use diesel::serialize::{Output, ToSql};
 use diesel::sql_types::{SmallInt, Text};
 use diesel::{AsExpression, FromSqlRow};
-use holochain_zome_types::prelude::{AnyLinkableHash, DhtOpHash, SignedAction, SignedWarrant, Timestamp};
 use holochain_zome_types::Entry;
+use holochain_zome_types::prelude::{
+    AnyLinkableHash, DhtOpHash, SignedAction, SignedWarrant, Timestamp,
+};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -82,7 +84,7 @@ pub enum DbOpType {
     RegisterDeletedEntryAction,
     RegisterAddLink,
     RegisterRemoveLink,
-    ChainIntegrityWarrant
+    ChainIntegrityWarrant,
 }
 
 impl<DB: Backend> FromSql<Text, DB> for DbOpType

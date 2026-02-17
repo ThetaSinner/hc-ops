@@ -2,13 +2,18 @@ use crate::render::{Render, SliceHashTable};
 use anyhow::Context;
 use diesel::SqliteConnection;
 use hc_ops::readable::{HumanReadable, HumanReadableDisplay};
-use hc_ops::retrieve::{AuthoredMeta, CacheMeta, DbKind, DhtMeta, ChainOp, get_agent_chain, get_all_actions, get_all_dht_ops, get_all_entries, get_ops_in_slice, get_pending_ops, get_slice_hashes, list_discovered_agents, load_database_key, open_holochain_database, get_ops_by_action_hash, get_ops_by_entry_hash};
+use hc_ops::retrieve::{
+    AuthoredMeta, CacheMeta, ChainOp, DbKind, DhtMeta, get_agent_chain, get_all_actions,
+    get_all_dht_ops, get_all_entries, get_ops_by_action_hash, get_ops_by_entry_hash,
+    get_ops_in_slice, get_pending_ops, get_self_agent_chain, get_slice_hashes,
+    list_discovered_agents, load_database_key, open_holochain_database,
+};
 use hc_ops::{HcOpsError, HcOpsResult};
+use holo_hash::{ActionHash, ActionHashB64};
 use holochain_conductor_api::{AppInfo, CellInfo};
 use holochain_zome_types::prelude::{AgentPubKey, AgentPubKeyB64, DnaHash, Entry, SignedAction};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
-use holo_hash::{ActionHash, ActionHashB64};
 
 pub trait AsAnyhowPretty<T> {
     fn into_anyhow(self) -> anyhow::Result<T>;
@@ -94,6 +99,7 @@ fn run_explorer(
     enum Operation {
         WhoIsHere,
         AgentChain,
+        SelfAgentChain,
         Pending,
         FindOpsByActionHash,
         FindOpsByEntryHash,
@@ -109,6 +115,7 @@ fn run_explorer(
             match self {
                 Operation::WhoIsHere => write!(f, "Who is here?"),
                 Operation::AgentChain => write!(f, "View an agent chain"),
+                Operation::SelfAgentChain => write!(f, "View this agent's chain"),
                 Operation::Pending => write!(f, "View ops pending validation or integration"),
                 Operation::FindOpsByActionHash => write!(f, "View ops by action hash"),
                 Operation::FindOpsByEntryHash => write!(f, "View ops by entry hash"),
@@ -124,6 +131,7 @@ fn run_explorer(
     let operations = vec![
         Operation::WhoIsHere,
         Operation::AgentChain,
+        Operation::SelfAgentChain,
         Operation::Pending,
         Operation::FindOpsByActionHash,
         Operation::FindOpsByEntryHash,
@@ -158,10 +166,24 @@ fn run_explorer(
                     .context("Invalid agent key")?
                     .into();
 
+                // Prompt the user to check whether to include items from the cache.
+                let cache = dialoguer::Confirm::new()
+                    .with_prompt("Include items from cache?")
+                    .interact()?
+                    .then_some(&mut *cache);
+
                 let chain = get_agent_chain(dht, cache, &key).into_anyhow()?;
 
                 println!(
                     "Agent chain: {}",
+                    chain.as_human_readable_pretty().into_anyhow()?
+                );
+            }
+            Operation::SelfAgentChain => {
+                let chain = get_self_agent_chain(authored).into_anyhow()?;
+
+                println!(
+                    "This agent's chain: {}",
                     chain.as_human_readable_pretty().into_anyhow()?
                 );
             }
@@ -185,12 +207,13 @@ fn run_explorer(
                     .interact()?;
 
                 let hash: ActionHash = ActionHashB64::from_b64_str(&hash)
-                    .context("Invalid action hash, must be a 39 character base64 string")?.into();
+                    .context("Invalid action hash, must be a 39 character base64 string")?
+                    .into();
 
                 let ops = get_ops_by_action_hash(dht, &hash)?
-                        .into_iter()
-                        .map(TryInto::try_into)
-                        .collect::<HcOpsResult<Vec<ChainOp<DhtMeta>>>>()?;
+                    .into_iter()
+                    .map(TryInto::try_into)
+                    .collect::<HcOpsResult<Vec<ChainOp<DhtMeta>>>>()?;
 
                 if ops.is_empty() {
                     println!("No ops found for action hash: {}", hash);
@@ -208,12 +231,13 @@ fn run_explorer(
                     .interact()?;
 
                 let hash: holo_hash::EntryHash = holo_hash::EntryHashB64::from_b64_str(&hash)
-                    .context("Invalid entry hash, must be a 39 character base64 string")?.into();
+                    .context("Invalid entry hash, must be a 39 character base64 string")?
+                    .into();
 
                 let ops = get_ops_by_entry_hash(dht, &hash)?
-                        .into_iter()
-                        .map(TryInto::try_into)
-                        .collect::<HcOpsResult<Vec<ChainOp<DhtMeta>>>>()?;
+                    .into_iter()
+                    .map(TryInto::try_into)
+                    .collect::<HcOpsResult<Vec<ChainOp<DhtMeta>>>>()?;
 
                 if ops.is_empty() {
                     println!("No ops found for entry hash: {}", hash);
