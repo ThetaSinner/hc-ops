@@ -128,11 +128,17 @@ impl HumanReadable for AppInfo {
             for cell in value.as_array_mut().unwrap() {
                 let cell = cell.as_object_mut().unwrap();
 
-                if let Some(provisioned) = cell.get_mut("provisioned") {
-                    replace_field(provisioned, "cell_id", transform_cell_id)?;
-                } else if let Some(cloned) = cell.get_mut("cloned") {
-                    replace_field(cloned, "cell_id", transform_cell_id)?;
-                    replace_field(cloned, "original_dna_hash", transform_dna_hash)?
+                if let Some(cell_type) = cell.get("type").and_then(|c| c.as_str()) {
+                    if cell_type == "provisioned" {
+                        if let Some(value) = cell.get_mut("value") {
+                            replace_field(value, "cell_id", transform_cell_id)?;
+                        }
+                    } else if cell_type == "cloned" {
+                        if let Some(value) = cell.get_mut("value") {
+                            replace_field(value, "cell_id", transform_cell_id)?;
+                            replace_field(value, "original_dna_hash", transform_dna_hash)?
+                        }
+                    }
                 }
             }
         }
