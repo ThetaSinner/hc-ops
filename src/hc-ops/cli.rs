@@ -164,6 +164,12 @@ pub enum AdminCommands {
         /// Get the list of agents for a single app
         app_id: Option<String>,
     },
+    DumpState {
+        /// The DNA hash to dump.
+        dna_hash: String,
+        /// The agent running the DNA to be dumped.
+        agent_id: String,
+    }
 }
 
 #[derive(Debug, Args)]

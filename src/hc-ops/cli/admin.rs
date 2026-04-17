@@ -3,10 +3,11 @@ use crate::connect_admin_client;
 use crate::render::Render;
 use diesel::SqliteConnection;
 use hc_ops::readable::HumanReadableDisplay;
-use holo_hash::DnaHash;
+use holo_hash::{AgentPubKeyB64, DnaHash, DnaHashB64};
 use holochain_client::InstallAppPayload;
 use holochain_conductor_api::{AppStatusFilter, CellInfo, StorageBlob, StorageInfo};
 use holochain_types::prelude::AppBundleSource;
+use holochain_zome_types::cell::CellId;
 use kitsune2_api::AgentInfoSigned;
 use kitsune2_core::Ed25519Verifier;
 use std::collections::HashMap;
@@ -194,6 +195,17 @@ pub(crate) async fn handle_admin_command(
             };
 
             std::io::stdout().write_all(agents.as_human_readable()?.as_bytes())?;
+        }
+        AdminCommands::DumpState { dna_hash, agent_id } => {
+            let output = client
+                .dump_state(CellId::new(
+                    DnaHashB64::from_b64_str(&dna_hash)?.into(),
+                    AgentPubKeyB64::from_b64_str(&agent_id)?.into(),
+                ))
+                .await?;
+
+            // The output is not structured, it's a string, dumping is the best we can do
+            std::io::stdout().write_all(output.as_bytes())?;
         }
     }
 
