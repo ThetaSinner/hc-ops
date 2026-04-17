@@ -374,6 +374,40 @@ impl TryFrom<(DbDhtOp, Vec<u8>, Option<Vec<u8>>)> for Record {
     }
 }
 
+/// Count integrated, valid actions per author in the DHT database.
+///
+/// Joins `Action` to `DhtOp` and restricts to ops with `when_integrated IS NOT NULL` and
+/// `validation_status = Valid`. Each action produces multiple ops, so we count distinct
+/// action hashes per author. Results are sorted by count descending, then by agent key.
+pub fn count_actions_by_author(
+    dht: &mut SqliteConnection,
+) -> HcOpsResult<Vec<(AgentPubKey, i64)>> {
+    use diesel::dsl::count;
+    use diesel::prelude::*;
+    use schema::Action::dsl as action_fields;
+    use schema::DhtOp::dsl as dht_op_fields;
+
+    let loaded = schema::Action::table
+        .inner_join(schema::DhtOp::table)
+        .filter(dht_op_fields::when_integrated.is_not_null())
+        .filter(dht_op_fields::validation_status.eq(ValidationStatus::Valid))
+        .group_by(action_fields::author)
+        .select((
+            action_fields::author,
+            count(action_fields::hash).aggregate_distinct(),
+        ))
+        .load::<(Vec<u8>, i64)>(dht)?;
+
+    let mut out = loaded
+        .into_iter()
+        .map(|(author, count)| Ok((AgentPubKey::try_from_raw_39(author)?, count)))
+        .collect::<HcOpsResult<Vec<_>>>()?;
+
+    out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+
+    Ok(out)
+}
+
 pub fn get_slice_hashes(authored: &mut SqliteConnection) -> HcOpsResult<Vec<SliceHash>> {
     use diesel::prelude::*;
 

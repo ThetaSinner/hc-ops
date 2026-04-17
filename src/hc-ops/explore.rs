@@ -1,12 +1,12 @@
-use crate::render::{Render, SliceHashTable};
+use crate::render::{ActionCountByAuthorTable, Render, SliceHashTable};
 use anyhow::Context;
 use diesel::SqliteConnection;
 use hc_ops::readable::{HumanReadable, HumanReadableDisplay};
 use hc_ops::retrieve::{
-    AuthoredMeta, CacheMeta, ChainOp, DbKind, DhtMeta, get_agent_chain, get_all_actions,
-    get_all_dht_ops, get_all_entries, get_ops_by_action_hash, get_ops_by_entry_hash,
-    get_ops_in_slice, get_pending_ops, get_self_agent_chain, get_slice_hashes,
-    list_discovered_agents, load_database_key, open_holochain_database,
+    AuthoredMeta, CacheMeta, ChainOp, DbKind, DhtMeta, count_actions_by_author, get_agent_chain,
+    get_all_actions, get_all_dht_ops, get_all_entries, get_ops_by_action_hash,
+    get_ops_by_entry_hash, get_ops_in_slice, get_pending_ops, get_self_agent_chain,
+    get_slice_hashes, list_discovered_agents, load_database_key, open_holochain_database,
 };
 use hc_ops::{HcOpsError, HcOpsResult};
 use holo_hash::{ActionHash, ActionHashB64};
@@ -98,6 +98,7 @@ fn run_explorer(
 ) -> anyhow::Result<bool> {
     enum Operation {
         WhoIsHere,
+        ActionCountByAuthor,
         AgentChain,
         SelfAgentChain,
         Pending,
@@ -114,6 +115,7 @@ fn run_explorer(
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             match self {
                 Operation::WhoIsHere => write!(f, "Who is here?"),
+                Operation::ActionCountByAuthor => write!(f, "Count actions by author"),
                 Operation::AgentChain => write!(f, "View an agent chain"),
                 Operation::SelfAgentChain => write!(f, "View this agent's chain"),
                 Operation::Pending => write!(f, "View ops pending validation or integration"),
@@ -130,6 +132,7 @@ fn run_explorer(
 
     let operations = vec![
         Operation::WhoIsHere,
+        Operation::ActionCountByAuthor,
         Operation::AgentChain,
         Operation::SelfAgentChain,
         Operation::Pending,
@@ -156,6 +159,19 @@ fn run_explorer(
                     "Discovered agents: {}",
                     discovered.as_human_readable_pretty()?
                 );
+            }
+            Operation::ActionCountByAuthor => {
+                let counts = count_actions_by_author(dht).into_anyhow()?;
+
+                if counts.is_empty() {
+                    println!("No actions found");
+                } else {
+                    counts
+                        .into_iter()
+                        .map(Into::into)
+                        .collect::<Vec<ActionCountByAuthorTable>>()
+                        .render(std::io::stdout())?
+                }
             }
             Operation::AgentChain => {
                 let key: String = dialoguer::Input::new()
