@@ -329,6 +329,39 @@ pub struct Record {
     pub entry: Option<Entry>,
 }
 
+/// Look up the record (op, action, and optional entry) for a given DHT op hash.
+///
+/// Returns `None` if no op with the given hash exists in the DHT database.
+/// Does not filter on integration status — the op is returned whether or not
+/// it has been integrated.
+pub fn get_record_by_op_hash(
+    dht: &mut SqliteConnection,
+    op_hash: &DhtOpHash,
+) -> HcOpsResult<Option<Record>> {
+    use diesel::prelude::*;
+    use schema::Action::dsl as action_fields;
+    use schema::DhtOp::dsl as dht_op_fields;
+    use schema::Entry::dsl as entry_fields;
+
+    let loaded = schema::DhtOp::table
+        .inner_join(schema::Action::table)
+        .left_join(
+            schema::Entry::table.on(action_fields::entry_hash
+                .assume_not_null()
+                .eq(entry_fields::hash)),
+        )
+        .filter(dht_op_fields::hash.eq(op_hash.get_raw_39()))
+        .select((
+            DbDhtOp::as_select(),
+            action_fields::blob,
+            entry_fields::blob.nullable(),
+        ))
+        .first::<(DbDhtOp, Vec<u8>, Option<Vec<u8>>)>(dht)
+        .optional()?;
+
+    loaded.map(TryInto::try_into).transpose()
+}
+
 pub fn get_pending_ops(dht: &mut SqliteConnection) -> HcOpsResult<Vec<Record>> {
     use diesel::prelude::*;
     use schema::Action::dsl as action_fields;

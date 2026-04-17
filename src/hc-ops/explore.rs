@@ -5,8 +5,9 @@ use hc_ops::readable::{HumanReadable, HumanReadableDisplay};
 use hc_ops::retrieve::{
     AuthoredMeta, CacheMeta, ChainOp, DbKind, DhtMeta, count_actions_by_author, get_agent_chain,
     get_all_actions, get_all_dht_ops, get_all_entries, get_ops_by_action_hash,
-    get_ops_by_entry_hash, get_ops_in_slice, get_pending_ops, get_self_agent_chain,
-    get_slice_hashes, list_discovered_agents, load_database_key, open_holochain_database,
+    get_ops_by_entry_hash, get_ops_in_slice, get_pending_ops, get_record_by_op_hash,
+    get_self_agent_chain, get_slice_hashes, list_discovered_agents, load_database_key,
+    open_holochain_database,
 };
 use hc_ops::{HcOpsError, HcOpsResult};
 use holo_hash::{ActionHash, ActionHashB64};
@@ -104,6 +105,7 @@ fn run_explorer(
         Pending,
         FindOpsByActionHash,
         FindOpsByEntryHash,
+        FindRecordByOpHash,
         SliceHashes,
         OpsInSlice,
         Dump,
@@ -121,6 +123,7 @@ fn run_explorer(
                 Operation::Pending => write!(f, "View ops pending validation or integration"),
                 Operation::FindOpsByActionHash => write!(f, "View ops by action hash"),
                 Operation::FindOpsByEntryHash => write!(f, "View ops by entry hash"),
+                Operation::FindRecordByOpHash => write!(f, "View action and entry by op hash"),
                 Operation::SliceHashes => write!(f, "View slice hashes"),
                 Operation::OpsInSlice => write!(f, "View ops in a slice"),
                 Operation::Dump => write!(f, "Dump"),
@@ -138,6 +141,7 @@ fn run_explorer(
         Operation::Pending,
         Operation::FindOpsByActionHash,
         Operation::FindOpsByEntryHash,
+        Operation::FindRecordByOpHash,
         Operation::SliceHashes,
         Operation::OpsInSlice,
         Operation::Dump,
@@ -263,6 +267,28 @@ fn run_explorer(
                         hash,
                         ops.as_human_readable_pretty()?
                     );
+                }
+            }
+            Operation::FindRecordByOpHash => {
+                let hash: String = dialoguer::Input::new()
+                    .with_prompt("Enter the op hash")
+                    .interact()?;
+
+                let hash: holo_hash::DhtOpHash = holo_hash::DhtOpHashB64::from_b64_str(&hash)
+                    .context("Invalid op hash, must be a 39 character base64 string")?
+                    .into();
+
+                match get_record_by_op_hash(dht, &hash).into_anyhow()? {
+                    Some(record) => {
+                        println!(
+                            "Record for op hash {}: {}",
+                            hash,
+                            record.as_human_readable_pretty().into_anyhow()?
+                        );
+                    }
+                    None => {
+                        println!("No op found for op hash: {}", hash);
+                    }
                 }
             }
             Operation::SliceHashes => {

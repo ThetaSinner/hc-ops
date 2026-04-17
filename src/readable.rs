@@ -435,6 +435,8 @@ impl HumanReadable for ChainRecord {
     }
 }
 
+impl HumanReadableDisplay for Record {}
+
 impl HumanReadable for Record {
     fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
         let mut out = serde_json::Map::new();
