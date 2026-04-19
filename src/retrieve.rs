@@ -67,6 +67,41 @@ pub fn open_holochain_database<P: AsRef<Path>>(
     Ok(conn)
 }
 
+pub fn open_conductor_database<P: AsRef<Path>>(
+    data_root_path: P,
+    key: Option<&mut Key>,
+) -> HcOpsResult<SqliteConnection> {
+    let path = data_root_path
+        .as_ref()
+        .join("databases")
+        .join("conductor")
+        .join("conductor");
+
+    let mut conn = SqliteConnection::establish(
+        path.to_str()
+            .ok_or_else(|| HcOpsError::Other("Invalid database path".into()))?,
+    )
+    .map_err(HcOpsError::other)?;
+
+    if let Some(key) = key {
+        apply_key(&mut conn, key)?;
+    }
+
+    Ok(conn)
+}
+
+pub fn get_blocks(conductor: &mut SqliteConnection) -> HcOpsResult<Vec<BlockRecord>> {
+    use diesel::prelude::*;
+    use schema::BlockSpan::dsl as block_fields;
+
+    let loaded = schema::BlockSpan::table
+        .order_by(block_fields::start_us.asc())
+        .select(DbBlockSpan::as_select())
+        .load::<DbBlockSpan>(conductor)?;
+
+    loaded.into_iter().map(TryInto::try_into).collect()
+}
+
 pub fn get_all_dht_ops(conn: &mut SqliteConnection) -> Vec<DbDhtOp> {
     schema::DhtOp::table.load(conn).unwrap()
 }

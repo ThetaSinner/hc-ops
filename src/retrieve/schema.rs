@@ -97,3 +97,13 @@ diesel::table! {
         hash -> Blob,
     }
 }
+
+diesel::table! {
+    BlockSpan (id) {
+        id -> Int8,
+        target_id -> Blob,
+        target_reason -> Blob,
+        start_us -> Int8,
+        end_us -> Int8,
+    }
+}

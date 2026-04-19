@@ -1,4 +1,4 @@
-use crate::retrieve::{ChainOp, ChainRecord, Record, WarrantRecord};
+use crate::retrieve::{BlockRecord, ChainOp, ChainRecord, Record, WarrantRecord};
 use crate::{HcOpsError, HcOpsResult, HcOpsResultContextExt};
 use base64::Engine;
 use holo_hash::WarrantHash;
@@ -524,6 +524,76 @@ fn transform_action_hash_and_sig(pair: &mut [serde_json::Value]) -> HcOpsResult<
     pair[0] = transform_action_hash(&pair[0])?;
     pair[1] = transform_flatten_byte_array(&pair[1])?;
     Ok(())
+}
+
+impl HumanReadableDisplay for BlockRecord {}
+
+impl HumanReadable for BlockRecord {
+    fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
+        let mut out = serde_json::Map::new();
+        out.insert(
+            "id".to_string(),
+            serde_json::Value::Number(self.id.into()),
+        );
+        out.insert("target".to_string(), transform_block_target_id(&self.target)?);
+        out.insert(
+            "reason".to_string(),
+            transform_block_target_reason(&self.reason)?,
+        );
+        out.insert(
+            "start".to_string(),
+            serde_json::Value::String(self.start.to_string()),
+        );
+        out.insert(
+            "end".to_string(),
+            serde_json::Value::String(self.end.to_string()),
+        );
+        Ok(serde_json::Value::Object(out))
+    }
+
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
+        self.as_human_readable_raw()
+    }
+}
+
+fn transform_block_target_id(
+    target: &holochain_zome_types::prelude::BlockTargetId,
+) -> HcOpsResult<serde_json::Value> {
+    let mut value = serde_json::to_value(target)?;
+
+    if let Some(cell) = value.as_object_mut().and_then(|o| o.get_mut("Cell")) {
+        *cell = transform_cell_id(cell)?;
+    }
+
+    #[allow(deprecated)]
+    if let Some(node_dna) = value
+        .as_object_mut()
+        .and_then(|o| o.get_mut("NodeDna"))
+        .and_then(|v| v.as_array_mut())
+    {
+        if node_dna.len() == 2 {
+            node_dna[1] = transform_dna_hash(&node_dna[1])?;
+        }
+    }
+
+    Ok(value)
+}
+
+fn transform_block_target_reason(
+    reason: &holochain_zome_types::prelude::BlockTargetReason,
+) -> HcOpsResult<serde_json::Value> {
+    let mut value = serde_json::to_value(reason)?;
+
+    if let Some(cell) = value
+        .as_object_mut()
+        .and_then(|o| o.get_mut("Cell"))
+        .and_then(|v| v.as_object_mut())
+        && let Some(invalid_op) = cell.get_mut("InvalidOp")
+    {
+        *invalid_op = transform_dht_op_hash(invalid_op)?;
+    }
+
+    Ok(value)
 }
 
 impl HumanReadableDisplay for Record {}

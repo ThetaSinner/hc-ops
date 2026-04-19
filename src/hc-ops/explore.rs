@@ -4,10 +4,10 @@ use diesel::SqliteConnection;
 use hc_ops::readable::{HumanReadable, HumanReadableDisplay};
 use hc_ops::retrieve::{
     AuthoredMeta, CacheMeta, ChainOp, DbKind, DhtMeta, count_actions_by_author, get_agent_chain,
-    get_all_actions, get_all_dht_ops, get_all_entries, get_ops_by_action_hash,
+    get_all_actions, get_all_dht_ops, get_all_entries, get_blocks, get_ops_by_action_hash,
     get_ops_by_entry_hash, get_ops_in_slice, get_pending_ops, get_record_by_op_hash,
     get_self_agent_chain, get_slice_hashes, get_warrant_by_op_hash, get_warrants,
-    list_discovered_agents, load_database_key, open_holochain_database,
+    list_discovered_agents, load_database_key, open_conductor_database, open_holochain_database,
 };
 use hc_ops::{HcOpsError, HcOpsResult};
 use holo_hash::{ActionHash, ActionHashB64};
@@ -73,8 +73,10 @@ pub async fn start_explorer(
                 let mut cache =
                     open_holochain_database(data_root_path, &DbKind::Cache, use_dna, key.as_mut())
                         .context("Failed to open the cache database")?;
+                let mut conductor = open_conductor_database(data_root_path, key.as_mut())
+                    .context("Failed to open the conductor database")?;
 
-                match run_explorer(&mut authored, &mut dht, &mut cache) {
+                match run_explorer(&mut authored, &mut dht, &mut cache, &mut conductor) {
                     Ok(true) => break 'outer,
                     Ok(false) => {
                         break;
@@ -96,6 +98,7 @@ fn run_explorer(
     authored: &mut SqliteConnection,
     dht: &mut SqliteConnection,
     cache: &mut SqliteConnection,
+    conductor: &mut SqliteConnection,
 ) -> anyhow::Result<bool> {
     enum Operation {
         WhoIsHere,
@@ -108,6 +111,7 @@ fn run_explorer(
         FindRecordByOpHash,
         FindWarrantByOpHash,
         ListWarrants,
+        ListBlocks,
         SliceHashes,
         OpsInSlice,
         Dump,
@@ -128,6 +132,7 @@ fn run_explorer(
                 Operation::FindRecordByOpHash => write!(f, "View action and entry by op hash"),
                 Operation::FindWarrantByOpHash => write!(f, "View warrant by op hash"),
                 Operation::ListWarrants => write!(f, "List warrants in DHT"),
+                Operation::ListBlocks => write!(f, "List blocks (conductor)"),
                 Operation::SliceHashes => write!(f, "View slice hashes"),
                 Operation::OpsInSlice => write!(f, "View ops in a slice"),
                 Operation::Dump => write!(f, "Dump"),
@@ -148,6 +153,7 @@ fn run_explorer(
         Operation::FindRecordByOpHash,
         Operation::FindWarrantByOpHash,
         Operation::ListWarrants,
+        Operation::ListBlocks,
         Operation::SliceHashes,
         Operation::OpsInSlice,
         Operation::Dump,
@@ -328,6 +334,18 @@ fn run_explorer(
                     println!(
                         "Warrants: {}",
                         warrants.as_human_readable_pretty().into_anyhow()?
+                    );
+                }
+            }
+            Operation::ListBlocks => {
+                let blocks = get_blocks(conductor).into_anyhow()?;
+
+                if blocks.is_empty() {
+                    println!("No blocks found");
+                } else {
+                    println!(
+                        "Blocks: {}",
+                        blocks.as_human_readable_pretty().into_anyhow()?
                     );
                 }
             }
