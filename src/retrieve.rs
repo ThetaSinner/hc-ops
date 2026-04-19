@@ -548,9 +548,7 @@ impl TryFrom<(DbDhtOp, Vec<u8>, Option<Vec<u8>>)> for Record {
 /// Joins `Action` to `DhtOp` and restricts to ops with `when_integrated IS NOT NULL` and
 /// `validation_status = Valid`. Each action produces multiple ops, so we count distinct
 /// action hashes per author. Results are sorted by count descending, then by agent key.
-pub fn count_actions_by_author(
-    dht: &mut SqliteConnection,
-) -> HcOpsResult<Vec<(AgentPubKey, i64)>> {
+pub fn count_actions_by_author(dht: &mut SqliteConnection) -> HcOpsResult<Vec<(AgentPubKey, i64)>> {
     use diesel::dsl::count;
     use diesel::prelude::*;
     use schema::Action::dsl as action_fields;

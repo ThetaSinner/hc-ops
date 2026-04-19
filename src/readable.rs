@@ -531,11 +531,11 @@ impl HumanReadableDisplay for BlockRecord {}
 impl HumanReadable for BlockRecord {
     fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
         let mut out = serde_json::Map::new();
+        out.insert("id".to_string(), serde_json::Value::Number(self.id.into()));
         out.insert(
-            "id".to_string(),
-            serde_json::Value::Number(self.id.into()),
+            "target".to_string(),
+            transform_block_target_id(&self.target)?,
         );
-        out.insert("target".to_string(), transform_block_target_id(&self.target)?);
         out.insert(
             "reason".to_string(),
             transform_block_target_reason(&self.reason)?,

@@ -169,7 +169,7 @@ pub enum AdminCommands {
         dna_hash: String,
         /// The agent running the DNA to be dumped.
         agent_id: String,
-    }
+    },
 }
 
 #[derive(Debug, Args)]
