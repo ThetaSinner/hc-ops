@@ -429,6 +429,40 @@ pub fn get_warrant_by_op_hash(
     Ok(Some(WarrantRecord { dht_op, warrant }))
 }
 
+/// List all integrated warrant ops in the DHT database with their warrant content.
+///
+/// Filters to `DhtOp.typ = "ChainIntegrityWarrant"` with `when_integrated IS NOT NULL`,
+/// joined to the `Warrant` row on `DhtOp.action_hash = Warrant.hash`. The validation
+/// status (Valid = warrant accepted, Rejected = warrant author was wrong) is carried
+/// in `WarrantRecord::dht_op.meta`.
+pub fn get_warrants(dht: &mut SqliteConnection) -> HcOpsResult<Vec<WarrantRecord>> {
+    use diesel::prelude::*;
+    use schema::DhtOp::dsl as dht_op_fields;
+    use schema::Warrant::dsl as warrant_fields;
+
+    let loaded = schema::DhtOp::table
+        .inner_join(
+            schema::Warrant::table.on(dht_op_fields::action_hash
+                .assume_not_null()
+                .eq(warrant_fields::hash)),
+        )
+        .filter(dht_op_fields::typ.eq("ChainIntegrityWarrant"))
+        .filter(dht_op_fields::when_integrated.is_not_null())
+        .order_by(dht_op_fields::authored_timestamp.asc())
+        .select((DbDhtOp::as_select(), DbWarrant::as_select()))
+        .load::<(DbDhtOp, DbWarrant)>(dht)?;
+
+    loaded
+        .into_iter()
+        .map(|(db_op, db_warrant)| {
+            Ok(WarrantRecord {
+                dht_op: db_op.try_into()?,
+                warrant: db_warrant.try_into()?,
+            })
+        })
+        .collect()
+}
+
 pub fn get_pending_ops(dht: &mut SqliteConnection) -> HcOpsResult<Vec<Record>> {
     use diesel::prelude::*;
     use schema::Action::dsl as action_fields;
