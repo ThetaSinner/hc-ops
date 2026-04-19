@@ -333,7 +333,7 @@ pub struct Record {
 ///
 /// Returns `None` if no op with the given hash exists in the DHT database.
 /// Does not filter on integration status — the op is returned whether or not
-/// it has been integrated.
+/// it has been integrated. Chain ops only: warrant ops are not returned.
 pub fn get_record_by_op_hash(
     dht: &mut SqliteConnection,
     op_hash: &DhtOpHash,
@@ -343,23 +343,90 @@ pub fn get_record_by_op_hash(
     use schema::DhtOp::dsl as dht_op_fields;
     use schema::Entry::dsl as entry_fields;
 
-    let loaded = schema::DhtOp::table
-        .inner_join(schema::Action::table)
-        .left_join(
+    let op_hash_bytes = op_hash.get_raw_39().to_vec();
+
+    let Some(db_op) = schema::DhtOp::table
+        .filter(dht_op_fields::hash.eq(&op_hash_bytes))
+        .select(DbDhtOp::as_select())
+        .first::<DbDhtOp>(dht)
+        .optional()?
+    else {
+        return Ok(None);
+    };
+
+    let Some(action_hash) = db_op.action_hash.clone() else {
+        return Ok(None);
+    };
+
+    let Some(action_blob) = schema::Action::table
+        .filter(action_fields::hash.eq(&action_hash))
+        .select(action_fields::blob)
+        .first::<Vec<u8>>(dht)
+        .optional()?
+    else {
+        return Ok(None);
+    };
+
+    let entry_blob = schema::Action::table
+        .inner_join(
             schema::Entry::table.on(action_fields::entry_hash
                 .assume_not_null()
                 .eq(entry_fields::hash)),
         )
-        .filter(dht_op_fields::hash.eq(op_hash.get_raw_39()))
-        .select((
-            DbDhtOp::as_select(),
-            action_fields::blob,
-            entry_fields::blob.nullable(),
-        ))
-        .first::<(DbDhtOp, Vec<u8>, Option<Vec<u8>>)>(dht)
+        .filter(action_fields::hash.eq(&action_hash))
+        .select(entry_fields::blob)
+        .first::<Vec<u8>>(dht)
         .optional()?;
 
-    loaded.map(TryInto::try_into).transpose()
+    Ok(Some((db_op, action_blob, entry_blob).try_into()?))
+}
+
+/// A warrant op and its associated [`SignedWarrant`] content.
+pub struct WarrantRecord {
+    pub dht_op: ChainOp<DhtMeta>,
+    pub warrant: holochain_zome_types::prelude::SignedWarrant,
+}
+
+/// Look up a warrant op and its warrant content by op hash.
+///
+/// Returns `None` if no op with the given hash exists, if the op is not a warrant op,
+/// or if the referenced warrant row is missing.
+pub fn get_warrant_by_op_hash(
+    dht: &mut SqliteConnection,
+    op_hash: &DhtOpHash,
+) -> HcOpsResult<Option<WarrantRecord>> {
+    use diesel::prelude::*;
+    use schema::DhtOp::dsl as dht_op_fields;
+    use schema::Warrant::dsl as warrant_fields;
+
+    let op_hash_bytes = op_hash.get_raw_39().to_vec();
+
+    let Some(db_op) = schema::DhtOp::table
+        .filter(dht_op_fields::hash.eq(&op_hash_bytes))
+        .select(DbDhtOp::as_select())
+        .first::<DbDhtOp>(dht)
+        .optional()?
+    else {
+        return Ok(None);
+    };
+
+    let Some(warrant_hash) = db_op.action_hash.clone() else {
+        return Ok(None);
+    };
+
+    let Some(db_warrant) = schema::Warrant::table
+        .filter(warrant_fields::hash.eq(&warrant_hash))
+        .select(DbWarrant::as_select())
+        .first::<DbWarrant>(dht)
+        .optional()?
+    else {
+        return Ok(None);
+    };
+
+    let dht_op: ChainOp<DhtMeta> = db_op.try_into()?;
+    let warrant: holochain_zome_types::prelude::SignedWarrant = db_warrant.try_into()?;
+
+    Ok(Some(WarrantRecord { dht_op, warrant }))
 }
 
 pub fn get_pending_ops(dht: &mut SqliteConnection) -> HcOpsResult<Vec<Record>> {

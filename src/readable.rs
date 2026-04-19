@@ -1,4 +1,4 @@
-use crate::retrieve::{ChainOp, ChainRecord, Record};
+use crate::retrieve::{ChainOp, ChainRecord, Record, WarrantRecord};
 use crate::{HcOpsError, HcOpsResult, HcOpsResultContextExt};
 use base64::Engine;
 use holo_hash::WarrantHash;
@@ -433,6 +433,97 @@ impl HumanReadable for ChainRecord {
     fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
         self.as_human_readable_raw()
     }
+}
+
+impl HumanReadableDisplay for WarrantRecord {}
+
+impl HumanReadable for WarrantRecord {
+    fn as_human_readable_raw(&self) -> HcOpsResult<serde_json::Value> {
+        let mut out = serde_json::Map::new();
+        out.insert("dht_op".to_string(), self.dht_op.as_human_readable_raw()?);
+
+        let mut warrant: serde_json::Value = serde_json::to_value(&self.warrant)?;
+
+        if let Some(signature) = warrant.get("signature") {
+            let sig = transform_flatten_byte_array(signature)?;
+            warrant
+                .as_object_mut()
+                .ok_or_else(|| HcOpsError::Other("Unexpected signed warrant shape".into()))?
+                .insert("signature".to_string(), sig);
+        }
+
+        let data = warrant
+            .get_mut("data")
+            .and_then(|v| v.as_object_mut())
+            .ok_or_else(|| HcOpsError::Other("Unexpected signed warrant shape".into()))?;
+
+        if data.contains_key("author") {
+            data["author"] = transform_agent_pub_key(&data["author"])?;
+        }
+
+        if data.contains_key("warrantee") {
+            data["warrantee"] = transform_agent_pub_key(&data["warrantee"])?;
+        }
+
+        if data.contains_key("timestamp") {
+            data["timestamp"] = transform_timestamp(&data["timestamp"])?;
+        }
+
+        if let Some(chain_integrity) = data
+            .get_mut("proof")
+            .and_then(|v| v.as_object_mut())
+            .and_then(|o| o.get_mut("ChainIntegrity"))
+            .and_then(|v| v.as_object_mut())
+        {
+            if let Some(invalid) = chain_integrity
+                .get_mut("InvalidChainOp")
+                .and_then(|v| v.as_object_mut())
+            {
+                if invalid.contains_key("action_author") {
+                    invalid["action_author"] = transform_agent_pub_key(&invalid["action_author"])?;
+                }
+                if let Some(pair) = invalid.get_mut("action").and_then(|v| v.as_array_mut()) {
+                    transform_action_hash_and_sig(pair)?;
+                }
+            }
+
+            if let Some(fork) = chain_integrity
+                .get_mut("ChainFork")
+                .and_then(|v| v.as_object_mut())
+            {
+                if fork.contains_key("chain_author") {
+                    fork["chain_author"] = transform_agent_pub_key(&fork["chain_author"])?;
+                }
+                if let Some(action_pair) =
+                    fork.get_mut("action_pair").and_then(|v| v.as_array_mut())
+                {
+                    for item in action_pair.iter_mut() {
+                        if let Some(pair) = item.as_array_mut() {
+                            transform_action_hash_and_sig(pair)?;
+                        }
+                    }
+                }
+            }
+        }
+
+        out.insert("warrant".to_string(), warrant);
+        Ok(serde_json::Value::Object(out))
+    }
+
+    fn as_human_readable_summary_raw(&self) -> HcOpsResult<serde_json::Value> {
+        self.as_human_readable_raw()
+    }
+}
+
+fn transform_action_hash_and_sig(pair: &mut [serde_json::Value]) -> HcOpsResult<()> {
+    if pair.len() != 2 {
+        return Err(HcOpsError::Other(
+            "Expected (ActionHash, Signature) tuple".into(),
+        ));
+    }
+    pair[0] = transform_action_hash(&pair[0])?;
+    pair[1] = transform_flatten_byte_array(&pair[1])?;
+    Ok(())
 }
 
 impl HumanReadableDisplay for Record {}
