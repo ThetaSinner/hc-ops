@@ -14,7 +14,81 @@ use holo_hash::{ActionHash, ActionHashB64};
 use holochain_conductor_api::{AppInfo, CellInfo};
 use holochain_zome_types::prelude::{AgentPubKey, AgentPubKeyB64, DnaHash, Entry, SignedAction};
 use std::fmt::{Display, Formatter};
-use std::path::Path;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+
+enum OutputSink {
+    Stdout(Box<dyn Write>),
+    File {
+        path: PathBuf,
+        file: Option<std::fs::File>,
+    },
+}
+
+impl OutputSink {
+    fn stdout() -> Self {
+        OutputSink::Stdout(Box::new(std::io::stdout()))
+    }
+
+    fn is_file(&self) -> bool {
+        matches!(self, OutputSink::File { .. })
+    }
+
+    fn writer(&mut self) -> anyhow::Result<&mut dyn Write> {
+        match self {
+            OutputSink::Stdout(w) => Ok(w.as_mut()),
+            OutputSink::File { path, file } => {
+                if file.is_none() {
+                    *file = Some(
+                        std::fs::File::create(&*path)
+                            .with_context(|| format!("Could not create {}", path.display()))?,
+                    );
+                }
+                Ok(file.as_mut().unwrap())
+            }
+        }
+    }
+}
+
+fn prompt_output_sink() -> anyhow::Result<OutputSink> {
+    loop {
+        let raw: String = dialoguer::Input::new()
+            .with_prompt("Output file (empty for stdout)")
+            .allow_empty(true)
+            .interact_text()?;
+
+        if raw.trim().is_empty() {
+            return Ok(OutputSink::stdout());
+        }
+
+        let path = PathBuf::from(raw);
+        if path.exists() {
+            let overwrite = dialoguer::Confirm::new()
+                .with_prompt(format!(
+                    "{} already exists. Overwrite?",
+                    path.display()
+                ))
+                .default(false)
+                .interact()?;
+            if !overwrite {
+                continue;
+            }
+        }
+
+        return Ok(OutputSink::File { path, file: None });
+    }
+}
+
+fn emit_labeled(sink: &mut OutputSink, label: &str, body: &str) -> anyhow::Result<()> {
+    let is_file = sink.is_file();
+    let w = sink.writer()?;
+    if is_file {
+        writeln!(w, "{body}")?;
+    } else {
+        writeln!(w, "{label}: {body}")?;
+    }
+    Ok(())
+}
 
 pub trait AsAnyhowPretty<T> {
     fn into_anyhow(self) -> anyhow::Result<T>;
@@ -167,14 +241,25 @@ fn run_explorer(
             .items(&operations)
             .interact()?;
 
-        match operations[selected] {
+        let op = &operations[selected];
+        if matches!(op, Operation::Back) {
+            return Ok(false);
+        }
+        if matches!(op, Operation::Exit) {
+            return Ok(true);
+        }
+
+        let mut sink = prompt_output_sink()?;
+
+        match op {
             Operation::WhoIsHere => {
                 let discovered = list_discovered_agents(dht, cache)?;
 
-                println!(
-                    "Discovered agents: {}",
-                    discovered.as_human_readable_pretty()?
-                );
+                emit_labeled(
+                    &mut sink,
+                    "Discovered agents",
+                    &discovered.as_human_readable_pretty()?,
+                )?;
             }
             Operation::ActionCountByAuthor => {
                 let counts = count_actions_by_author(dht).into_anyhow()?;
@@ -186,7 +271,7 @@ fn run_explorer(
                         .into_iter()
                         .map(Into::into)
                         .collect::<Vec<ActionCountByAuthorTable>>()
-                        .render(std::io::stdout())?
+                        .render(sink.writer()?)?
                 }
             }
             Operation::AgentChain => {
@@ -206,18 +291,20 @@ fn run_explorer(
 
                 let chain = get_agent_chain(dht, cache, &key).into_anyhow()?;
 
-                println!(
-                    "Agent chain: {}",
-                    chain.as_human_readable_pretty().into_anyhow()?
-                );
+                emit_labeled(
+                    &mut sink,
+                    "Agent chain",
+                    &chain.as_human_readable_pretty().into_anyhow()?,
+                )?;
             }
             Operation::SelfAgentChain => {
                 let chain = get_self_agent_chain(authored).into_anyhow()?;
 
-                println!(
-                    "This agent's chain: {}",
-                    chain.as_human_readable_pretty().into_anyhow()?
-                );
+                emit_labeled(
+                    &mut sink,
+                    "This agent's chain",
+                    &chain.as_human_readable_pretty().into_anyhow()?,
+                )?;
             }
             Operation::Pending => {
                 let pending = get_pending_ops(dht)?;
@@ -225,12 +312,13 @@ fn run_explorer(
                 if pending.is_empty() {
                     println!("No pending ops");
                 } else {
-                    println!(
-                        "Pending ops: {}",
-                        pending
+                    emit_labeled(
+                        &mut sink,
+                        "Pending ops",
+                        &pending
                             .as_human_readable_pretty()
-                            .context("Could not convert pending ops")?
-                    );
+                            .context("Could not convert pending ops")?,
+                    )?;
                 }
             }
             Operation::FindOpsByActionHash => {
@@ -250,11 +338,11 @@ fn run_explorer(
                 if ops.is_empty() {
                     println!("No ops found for action hash: {}", hash);
                 } else {
-                    println!(
-                        "Ops for action hash {}: {}",
-                        hash,
-                        ops.as_human_readable_pretty()?
-                    );
+                    emit_labeled(
+                        &mut sink,
+                        &format!("Ops for action hash {hash}"),
+                        &ops.as_human_readable_pretty()?,
+                    )?;
                 }
             }
             Operation::FindOpsByEntryHash => {
@@ -274,11 +362,11 @@ fn run_explorer(
                 if ops.is_empty() {
                     println!("No ops found for entry hash: {}", hash);
                 } else {
-                    println!(
-                        "Ops for entry hash {}: {}",
-                        hash,
-                        ops.as_human_readable_pretty()?
-                    );
+                    emit_labeled(
+                        &mut sink,
+                        &format!("Ops for entry hash {hash}"),
+                        &ops.as_human_readable_pretty()?,
+                    )?;
                 }
             }
             Operation::FindRecordByOpHash => {
@@ -292,11 +380,11 @@ fn run_explorer(
 
                 match get_record_by_op_hash(dht, &hash).into_anyhow()? {
                     Some(record) => {
-                        println!(
-                            "Record for op hash {}: {}",
-                            hash,
-                            record.as_human_readable_pretty().into_anyhow()?
-                        );
+                        emit_labeled(
+                            &mut sink,
+                            &format!("Record for op hash {hash}"),
+                            &record.as_human_readable_pretty().into_anyhow()?,
+                        )?;
                     }
                     None => {
                         println!("No op found for op hash: {}", hash);
@@ -314,11 +402,11 @@ fn run_explorer(
 
                 match get_warrant_by_op_hash(dht, &hash).into_anyhow()? {
                     Some(record) => {
-                        println!(
-                            "Warrant for op hash {}: {}",
-                            hash,
-                            record.as_human_readable_pretty().into_anyhow()?
-                        );
+                        emit_labeled(
+                            &mut sink,
+                            &format!("Warrant for op hash {hash}"),
+                            &record.as_human_readable_pretty().into_anyhow()?,
+                        )?;
                     }
                     None => {
                         println!("No warrant op found for op hash: {}", hash);
@@ -331,10 +419,11 @@ fn run_explorer(
                 if warrants.is_empty() {
                     println!("No warrants found");
                 } else {
-                    println!(
-                        "Warrants: {}",
-                        warrants.as_human_readable_pretty().into_anyhow()?
-                    );
+                    emit_labeled(
+                        &mut sink,
+                        "Warrants",
+                        &warrants.as_human_readable_pretty().into_anyhow()?,
+                    )?;
                 }
             }
             Operation::ListBlocks => {
@@ -343,10 +432,11 @@ fn run_explorer(
                 if blocks.is_empty() {
                     println!("No blocks found");
                 } else {
-                    println!(
-                        "Blocks: {}",
-                        blocks.as_human_readable_pretty().into_anyhow()?
-                    );
+                    emit_labeled(
+                        &mut sink,
+                        "Blocks",
+                        &blocks.as_human_readable_pretty().into_anyhow()?,
+                    )?;
                 }
             }
             Operation::SliceHashes => {
@@ -358,7 +448,7 @@ fn run_explorer(
                     .into_iter()
                     .map(Into::into)
                     .collect::<Vec<SliceHashTable>>()
-                    .render(std::io::stdout())?
+                    .render(sink.writer()?)?
             }
             Operation::OpsInSlice => {
                 let arc_start: u32 = dialoguer::Input::new()
@@ -378,88 +468,120 @@ fn run_explorer(
                 if ops.is_empty() {
                     println!("No ops in slice");
                 } else {
+                    let w = sink.writer()?;
                     for op in ops {
-                        println!("{op:?} @ {}", op.get_loc());
+                        writeln!(w, "{op:?} @ {}", op.get_loc())?;
                     }
                 }
             }
             Operation::Dump => {
-                let out = get_all_dht_ops(authored);
-                println!(
-                    "Authored ops: {}\n\n",
-                    out.into_iter()
-                        .map(TryInto::try_into)
-                        .collect::<HcOpsResult<Vec<ChainOp<AuthoredMeta>>>>()?
-                        .as_human_readable_pretty()
-                        .context("Could not convert authored ops")?
-                );
-
-                let out = get_all_actions(authored);
-                println!(
-                    "Authored actions: {}",
-                    out.into_iter()
-                        .map(TryInto::try_into)
-                        .collect::<HcOpsResult<Vec<SignedAction>>>()?
-                        .as_human_readable_summary_pretty()
-                        .context("Could not convert authored actions")?
-                );
-
-                let out = get_all_entries(authored);
-                println!(
-                    "Authored entries: {}",
-                    out.into_iter()
-                        .map(TryInto::try_into)
-                        .collect::<HcOpsResult<Vec<Entry>>>()?
-                        .as_human_readable_summary_pretty()
-                        .context("Could not convert authored entries")?
-                );
-
-                let out = get_all_dht_ops(dht);
-                println!(
-                    "DHT ops: {}\n\n",
-                    serde_json::to_string_pretty(
-                        &out.into_iter()
-                            .map(TryInto::try_into)
-                            .collect::<HcOpsResult<Vec<ChainOp<DhtMeta>>>>()?
-                            .as_human_readable_raw()?
-                    )?
-                );
-
-                let out = get_all_actions(dht);
-                println!(
-                    "DHT actions: {}",
-                    out.into_iter()
-                        .map(TryInto::try_into)
-                        .collect::<HcOpsResult<Vec<SignedAction>>>()?
-                        .as_human_readable_summary_pretty()?
-                );
-
-                let out = get_all_dht_ops(cache);
-                println!(
-                    "Cache ops: {}\n\n",
-                    out.into_iter()
-                        .map(TryInto::try_into)
-                        .collect::<HcOpsResult<Vec<ChainOp<CacheMeta>>>>()?
-                        .as_human_readable_pretty()?
-                );
-
-                let out = get_all_actions(cache);
-                println!(
-                    "Cache actions: {}",
-                    out.into_iter()
-                        .map(TryInto::try_into)
-                        .collect::<HcOpsResult<Vec<SignedAction>>>()?
-                        .as_human_readable_summary_pretty()?
-                );
+                dump(&mut sink, authored, dht, cache)?;
             }
-            Operation::Back => {
-                return Ok(false);
-            }
-            Operation::Exit => {
-                return Ok(true);
-            }
+            Operation::Back | Operation::Exit => unreachable!(),
         }
     }
+}
+
+fn dump(
+    sink: &mut OutputSink,
+    authored: &mut SqliteConnection,
+    dht: &mut SqliteConnection,
+    cache: &mut SqliteConnection,
+) -> anyhow::Result<()> {
+    let authored_ops = get_all_dht_ops(authored)
+        .into_iter()
+        .map(TryInto::try_into)
+        .collect::<HcOpsResult<Vec<ChainOp<AuthoredMeta>>>>()?;
+    let authored_actions = get_all_actions(authored)
+        .into_iter()
+        .map(TryInto::try_into)
+        .collect::<HcOpsResult<Vec<SignedAction>>>()?;
+    let authored_entries = get_all_entries(authored)
+        .into_iter()
+        .map(TryInto::try_into)
+        .collect::<HcOpsResult<Vec<Entry>>>()?;
+    let dht_ops = get_all_dht_ops(dht)
+        .into_iter()
+        .map(TryInto::try_into)
+        .collect::<HcOpsResult<Vec<ChainOp<DhtMeta>>>>()?;
+    let dht_actions = get_all_actions(dht)
+        .into_iter()
+        .map(TryInto::try_into)
+        .collect::<HcOpsResult<Vec<SignedAction>>>()?;
+    let cache_ops = get_all_dht_ops(cache)
+        .into_iter()
+        .map(TryInto::try_into)
+        .collect::<HcOpsResult<Vec<ChainOp<CacheMeta>>>>()?;
+    let cache_actions = get_all_actions(cache)
+        .into_iter()
+        .map(TryInto::try_into)
+        .collect::<HcOpsResult<Vec<SignedAction>>>()?;
+
+    if sink.is_file() {
+        let mut envelope = serde_json::Map::new();
+        envelope.insert(
+            "authored_ops".to_string(),
+            authored_ops.as_human_readable_raw()?,
+        );
+        envelope.insert(
+            "authored_actions".to_string(),
+            authored_actions.as_human_readable_summary_raw()?,
+        );
+        envelope.insert(
+            "authored_entries".to_string(),
+            authored_entries.as_human_readable_summary_raw()?,
+        );
+        envelope.insert("dht_ops".to_string(), dht_ops.as_human_readable_raw()?);
+        envelope.insert(
+            "dht_actions".to_string(),
+            dht_actions.as_human_readable_summary_raw()?,
+        );
+        envelope.insert("cache_ops".to_string(), cache_ops.as_human_readable_raw()?);
+        envelope.insert(
+            "cache_actions".to_string(),
+            cache_actions.as_human_readable_summary_raw()?,
+        );
+
+        serde_json::to_writer_pretty(sink.writer()?, &serde_json::Value::Object(envelope))?;
+        writeln!(sink.writer()?)?;
+    } else {
+        println!(
+            "Authored ops: {}\n\n",
+            authored_ops
+                .as_human_readable_pretty()
+                .context("Could not convert authored ops")?
+        );
+        println!(
+            "Authored actions: {}",
+            authored_actions
+                .as_human_readable_summary_pretty()
+                .context("Could not convert authored actions")?
+        );
+        println!(
+            "Authored entries: {}",
+            authored_entries
+                .as_human_readable_summary_pretty()
+                .context("Could not convert authored entries")?
+        );
+        println!(
+            "DHT ops: {}\n\n",
+            serde_json::to_string_pretty(&dht_ops.as_human_readable_raw()?)?
+        );
+        println!(
+            "DHT actions: {}",
+            dht_actions.as_human_readable_summary_pretty()?
+        );
+        println!(
+            "Cache ops: {}\n\n",
+            cache_ops.as_human_readable_pretty()?
+        );
+        println!(
+            "Cache actions: {}",
+            cache_actions.as_human_readable_summary_pretty()?
+        );
+    }
+
+    Ok(())
 }
 
 fn select_app(apps: &[AppInfo]) -> anyhow::Result<Option<&AppInfo>> {
@@ -529,4 +651,59 @@ fn select_dna(app: &AppInfo) -> anyhow::Result<Option<&DnaHash>> {
     }
 
     Ok(Some(dna_hashes[selected].2))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn unique_temp_path(tag: &str) -> std::path::PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "hc-ops-explore-{tag}-{}-{nanos}",
+            std::process::id()
+        ))
+    }
+
+    #[test]
+    fn file_sink_does_not_touch_disk_until_first_write() {
+        let path = unique_temp_path("lazy-open");
+        assert!(!path.exists());
+
+        let sink = OutputSink::File {
+            path: path.clone(),
+            file: None,
+        };
+        drop(sink);
+
+        assert!(
+            !path.exists(),
+            "file should not be created just by constructing the sink"
+        );
+    }
+
+    #[test]
+    fn file_sink_creates_file_on_first_writer_call() {
+        let path = unique_temp_path("first-write");
+        let _cleanup = RemoveOnDrop(path.clone());
+
+        let mut sink = OutputSink::File {
+            path: path.clone(),
+            file: None,
+        };
+        write!(sink.writer().unwrap(), "hello").unwrap();
+
+        assert!(path.exists(), "file should exist after writing");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello");
+    }
+
+    struct RemoveOnDrop(std::path::PathBuf);
+    impl Drop for RemoveOnDrop {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
 }
