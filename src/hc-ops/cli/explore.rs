@@ -7,7 +7,16 @@ pub(crate) async fn handle_explore_command(
     conn: &mut SqliteConnection,
     args: ExploreArgs,
 ) -> anyhow::Result<()> {
-    let (client, _) = connect_admin_client(conn, &args.tag, &args.origin).await?;
+    let client = if args.offline {
+        None
+    } else {
+        let tag = args
+            .tag
+            .as_deref()
+            .expect("clap enforces --tag unless --offline");
+        let (client, _) = connect_admin_client(conn, tag, &args.origin).await?;
+        Some(client)
+    };
 
     start_explorer(conn, client, &args.data_root_path).await?;
 

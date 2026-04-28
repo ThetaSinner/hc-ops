@@ -90,6 +90,37 @@ pub fn open_conductor_database<P: AsRef<Path>>(
     Ok(conn)
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct ConductorStateView {
+    #[serde(default)]
+    installed_apps: holochain_types::app::InstalledAppMap,
+}
+
+/// Read the list of installed apps directly from the conductor database.
+///
+/// The conductor persists its state as a single messagepack blob in the
+/// `ConductorState` table (id = 1). We decode only the `installed_apps`
+/// field, which is enough for the explorer's app/DNA selection.
+pub fn get_installed_apps(
+    conductor: &mut SqliteConnection,
+) -> HcOpsResult<Vec<holochain_types::app::InstalledApp>> {
+    #[derive(diesel::QueryableByName)]
+    struct Row {
+        #[diesel(sql_type = diesel::sql_types::Binary)]
+        blob: Vec<u8>,
+    }
+
+    let rows: Vec<Row> =
+        sql_query("SELECT blob FROM ConductorState WHERE id = 1").load(conductor)?;
+
+    let Some(row) = rows.into_iter().next() else {
+        return Ok(Vec::new());
+    };
+
+    let view: ConductorStateView = holochain_serialized_bytes::decode(&row.blob)?;
+    Ok(view.installed_apps.into_values().collect())
+}
+
 pub fn get_blocks(conductor: &mut SqliteConnection) -> HcOpsResult<Vec<BlockRecord>> {
     use diesel::prelude::*;
     use schema::BlockSpan::dsl as block_fields;
@@ -733,5 +764,80 @@ mod tests {
         merge_into_chain(&mut chain, one_record);
 
         assert_eq!(chain.len(), 5);
+    }
+
+    #[test]
+    fn conductor_state_view_decodes_empty_installed_apps() {
+        // A source struct with the same field names as the real
+        // holochain::conductor::state::ConductorState. If rmp_serde ever
+        // switches from to_vec_named to positional encoding, this test
+        // fails before the DB reader hits the same issue.
+        #[derive(Debug, serde::Serialize)]
+        struct Source {
+            tag: String,
+            installed_apps: holochain_types::app::InstalledAppMap,
+            other_field: u32,
+        }
+
+        let src = Source {
+            tag: "irrelevant".to_string(),
+            installed_apps: Default::default(),
+            other_field: 42,
+        };
+
+        let bytes = holochain_serialized_bytes::encode(&src).unwrap();
+        let view: ConductorStateView = holochain_serialized_bytes::decode(&bytes).unwrap();
+
+        assert!(view.installed_apps.is_empty());
+    }
+
+    #[test]
+    fn conductor_state_view_round_trips_one_installed_app() {
+        use holochain_types::app::{
+            AppManifest, AppManifestV0, AppRoleManifest, InstalledApp, InstalledAppCommon,
+            InstalledAppMap,
+        };
+        use holochain_types::prelude::Timestamp;
+
+        let app_id = "my-app".to_string();
+        let agent_key = AgentPubKey::from_raw_36(vec![7; 36]);
+        let manifest = AppManifest::V0(AppManifestV0 {
+            name: "my-app".to_string(),
+            description: None,
+            roles: vec![AppRoleManifest::sample("role-0".to_string())],
+            allow_deferred_memproofs: false,
+            bootstrap_url: None,
+            signal_url: None,
+        });
+        let common = InstalledAppCommon::new(
+            app_id.clone(),
+            agent_key.clone(),
+            Vec::<(_, _)>::new(),
+            manifest,
+            Timestamp::now(),
+        )
+        .unwrap();
+        let installed = InstalledApp::new_fresh(common);
+
+        let mut installed_apps = InstalledAppMap::new();
+        installed_apps.insert(app_id.clone(), installed);
+
+        #[derive(Debug, serde::Serialize)]
+        struct Source {
+            tag: String,
+            installed_apps: InstalledAppMap,
+        }
+
+        let bytes = holochain_serialized_bytes::encode(&Source {
+            tag: "irrelevant".to_string(),
+            installed_apps,
+        })
+        .unwrap();
+        let view: ConductorStateView = holochain_serialized_bytes::decode(&bytes).unwrap();
+
+        let apps: Vec<_> = view.installed_apps.into_values().collect();
+        assert_eq!(apps.len(), 1);
+        assert_eq!(apps[0].id(), &app_id);
+        assert_eq!(apps[0].agent_key, agent_key);
     }
 }

@@ -203,9 +203,16 @@ pub enum InitCommands {
 
 #[derive(Debug, Args)]
 pub struct ExploreArgs {
-    /// The tag to use when connecting to Holochain
-    #[arg(long, short)]
-    pub tag: String,
+    /// Read installed apps from the conductor database instead of a running
+    /// conductor. No websocket connection is made; `--tag` and `--origin`
+    /// are ignored.
+    #[arg(long)]
+    pub offline: bool,
+
+    /// The tag to use when connecting to Holochain. Required unless
+    /// `--offline`.
+    #[arg(long, short, required_unless_present = "offline")]
+    pub tag: Option<String>,
 
     /// The origin header to use in the request
     #[arg(long, default_value = "hc-ops")]
