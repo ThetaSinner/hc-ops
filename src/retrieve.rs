@@ -67,6 +67,72 @@ pub fn open_holochain_database<P: AsRef<Path>>(
     Ok(conn)
 }
 
+pub fn open_conductor_database<P: AsRef<Path>>(
+    data_root_path: P,
+    key: Option<&mut Key>,
+) -> HcOpsResult<SqliteConnection> {
+    let path = data_root_path
+        .as_ref()
+        .join("databases")
+        .join("conductor")
+        .join("conductor");
+
+    let mut conn = SqliteConnection::establish(
+        path.to_str()
+            .ok_or_else(|| HcOpsError::Other("Invalid database path".into()))?,
+    )
+    .map_err(HcOpsError::other)?;
+
+    if let Some(key) = key {
+        apply_key(&mut conn, key)?;
+    }
+
+    Ok(conn)
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ConductorStateView {
+    #[serde(default)]
+    installed_apps: holochain_types::app::InstalledAppMap,
+}
+
+/// Read the list of installed apps directly from the conductor database.
+///
+/// The conductor persists its state as a single messagepack blob in the
+/// `ConductorState` table (id = 1). We decode only the `installed_apps`
+/// field, which is enough for the explorer's app/DNA selection.
+pub fn get_installed_apps(
+    conductor: &mut SqliteConnection,
+) -> HcOpsResult<Vec<holochain_types::app::InstalledApp>> {
+    #[derive(diesel::QueryableByName)]
+    struct Row {
+        #[diesel(sql_type = diesel::sql_types::Binary)]
+        blob: Vec<u8>,
+    }
+
+    let rows: Vec<Row> =
+        sql_query("SELECT blob FROM ConductorState WHERE id = 1").load(conductor)?;
+
+    let Some(row) = rows.into_iter().next() else {
+        return Ok(Vec::new());
+    };
+
+    let view: ConductorStateView = holochain_serialized_bytes::decode(&row.blob)?;
+    Ok(view.installed_apps.into_values().collect())
+}
+
+pub fn get_blocks(conductor: &mut SqliteConnection) -> HcOpsResult<Vec<BlockRecord>> {
+    use diesel::prelude::*;
+    use schema::BlockSpan::dsl as block_fields;
+
+    let loaded = schema::BlockSpan::table
+        .order_by(block_fields::start_us.asc())
+        .select(DbBlockSpan::as_select())
+        .load::<DbBlockSpan>(conductor)?;
+
+    loaded.into_iter().map(TryInto::try_into).collect()
+}
+
 pub fn get_all_dht_ops(conn: &mut SqliteConnection) -> Vec<DbDhtOp> {
     schema::DhtOp::table.load(conn).unwrap()
 }
@@ -329,6 +395,140 @@ pub struct Record {
     pub entry: Option<Entry>,
 }
 
+/// Look up the record (op, action, and optional entry) for a given DHT op hash.
+///
+/// Returns `None` if no op with the given hash exists in the DHT database.
+/// Does not filter on integration status — the op is returned whether or not
+/// it has been integrated. Chain ops only: warrant ops are not returned.
+pub fn get_record_by_op_hash(
+    dht: &mut SqliteConnection,
+    op_hash: &DhtOpHash,
+) -> HcOpsResult<Option<Record>> {
+    use diesel::prelude::*;
+    use schema::Action::dsl as action_fields;
+    use schema::DhtOp::dsl as dht_op_fields;
+    use schema::Entry::dsl as entry_fields;
+
+    let op_hash_bytes = op_hash.get_raw_39().to_vec();
+
+    let Some(db_op) = schema::DhtOp::table
+        .filter(dht_op_fields::hash.eq(&op_hash_bytes))
+        .select(DbDhtOp::as_select())
+        .first::<DbDhtOp>(dht)
+        .optional()?
+    else {
+        return Ok(None);
+    };
+
+    let Some(action_hash) = db_op.action_hash.clone() else {
+        return Ok(None);
+    };
+
+    let Some(action_blob) = schema::Action::table
+        .filter(action_fields::hash.eq(&action_hash))
+        .select(action_fields::blob)
+        .first::<Vec<u8>>(dht)
+        .optional()?
+    else {
+        return Ok(None);
+    };
+
+    let entry_blob = schema::Action::table
+        .inner_join(
+            schema::Entry::table.on(action_fields::entry_hash
+                .assume_not_null()
+                .eq(entry_fields::hash)),
+        )
+        .filter(action_fields::hash.eq(&action_hash))
+        .select(entry_fields::blob)
+        .first::<Vec<u8>>(dht)
+        .optional()?;
+
+    Ok(Some((db_op, action_blob, entry_blob).try_into()?))
+}
+
+/// A warrant op and its associated [`SignedWarrant`] content.
+pub struct WarrantRecord {
+    pub dht_op: ChainOp<DhtMeta>,
+    pub warrant: holochain_zome_types::prelude::SignedWarrant,
+}
+
+/// Look up a warrant op and its warrant content by op hash.
+///
+/// Returns `None` if no op with the given hash exists, if the op is not a warrant op,
+/// or if the referenced warrant row is missing.
+pub fn get_warrant_by_op_hash(
+    dht: &mut SqliteConnection,
+    op_hash: &DhtOpHash,
+) -> HcOpsResult<Option<WarrantRecord>> {
+    use diesel::prelude::*;
+    use schema::DhtOp::dsl as dht_op_fields;
+    use schema::Warrant::dsl as warrant_fields;
+
+    let op_hash_bytes = op_hash.get_raw_39().to_vec();
+
+    let Some(db_op) = schema::DhtOp::table
+        .filter(dht_op_fields::hash.eq(&op_hash_bytes))
+        .select(DbDhtOp::as_select())
+        .first::<DbDhtOp>(dht)
+        .optional()?
+    else {
+        return Ok(None);
+    };
+
+    let Some(warrant_hash) = db_op.action_hash.clone() else {
+        return Ok(None);
+    };
+
+    let Some(db_warrant) = schema::Warrant::table
+        .filter(warrant_fields::hash.eq(&warrant_hash))
+        .select(DbWarrant::as_select())
+        .first::<DbWarrant>(dht)
+        .optional()?
+    else {
+        return Ok(None);
+    };
+
+    let dht_op: ChainOp<DhtMeta> = db_op.try_into()?;
+    let warrant: holochain_zome_types::prelude::SignedWarrant = db_warrant.try_into()?;
+
+    Ok(Some(WarrantRecord { dht_op, warrant }))
+}
+
+/// List all integrated warrant ops in the DHT database with their warrant content.
+///
+/// Filters to `DhtOp.typ = "ChainIntegrityWarrant"` with `when_integrated IS NOT NULL`,
+/// joined to the `Warrant` row on `DhtOp.action_hash = Warrant.hash`. The validation
+/// status (Valid = warrant accepted, Rejected = warrant author was wrong) is carried
+/// in `WarrantRecord::dht_op.meta`.
+pub fn get_warrants(dht: &mut SqliteConnection) -> HcOpsResult<Vec<WarrantRecord>> {
+    use diesel::prelude::*;
+    use schema::DhtOp::dsl as dht_op_fields;
+    use schema::Warrant::dsl as warrant_fields;
+
+    let loaded = schema::DhtOp::table
+        .inner_join(
+            schema::Warrant::table.on(dht_op_fields::action_hash
+                .assume_not_null()
+                .eq(warrant_fields::hash)),
+        )
+        .filter(dht_op_fields::typ.eq("ChainIntegrityWarrant"))
+        .filter(dht_op_fields::when_integrated.is_not_null())
+        .order_by(dht_op_fields::authored_timestamp.asc())
+        .select((DbDhtOp::as_select(), DbWarrant::as_select()))
+        .load::<(DbDhtOp, DbWarrant)>(dht)?;
+
+    loaded
+        .into_iter()
+        .map(|(db_op, db_warrant)| {
+            Ok(WarrantRecord {
+                dht_op: db_op.try_into()?,
+                warrant: db_warrant.try_into()?,
+            })
+        })
+        .collect()
+}
+
 pub fn get_pending_ops(dht: &mut SqliteConnection) -> HcOpsResult<Vec<Record>> {
     use diesel::prelude::*;
     use schema::Action::dsl as action_fields;
@@ -372,6 +572,38 @@ impl TryFrom<(DbDhtOp, Vec<u8>, Option<Vec<u8>>)> for Record {
                 .transpose()?,
         })
     }
+}
+
+/// Count integrated, valid actions per author in the DHT database.
+///
+/// Joins `Action` to `DhtOp` and restricts to ops with `when_integrated IS NOT NULL` and
+/// `validation_status = Valid`. Each action produces multiple ops, so we count distinct
+/// action hashes per author. Results are sorted by count descending, then by agent key.
+pub fn count_actions_by_author(dht: &mut SqliteConnection) -> HcOpsResult<Vec<(AgentPubKey, i64)>> {
+    use diesel::dsl::count;
+    use diesel::prelude::*;
+    use schema::Action::dsl as action_fields;
+    use schema::DhtOp::dsl as dht_op_fields;
+
+    let loaded = schema::Action::table
+        .inner_join(schema::DhtOp::table)
+        .filter(dht_op_fields::when_integrated.is_not_null())
+        .filter(dht_op_fields::validation_status.eq(ValidationStatus::Valid))
+        .group_by(action_fields::author)
+        .select((
+            action_fields::author,
+            count(action_fields::hash).aggregate_distinct(),
+        ))
+        .load::<(Vec<u8>, i64)>(dht)?;
+
+    let mut out = loaded
+        .into_iter()
+        .map(|(author, count)| Ok((AgentPubKey::try_from_raw_39(author)?, count)))
+        .collect::<HcOpsResult<Vec<_>>>()?;
+
+    out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+
+    Ok(out)
 }
 
 pub fn get_slice_hashes(authored: &mut SqliteConnection) -> HcOpsResult<Vec<SliceHash>> {
@@ -532,5 +764,80 @@ mod tests {
         merge_into_chain(&mut chain, one_record);
 
         assert_eq!(chain.len(), 5);
+    }
+
+    #[test]
+    fn conductor_state_view_decodes_empty_installed_apps() {
+        // A source struct with the same field names as the real
+        // holochain::conductor::state::ConductorState. If rmp_serde ever
+        // switches from to_vec_named to positional encoding, this test
+        // fails before the DB reader hits the same issue.
+        #[derive(Debug, serde::Serialize)]
+        struct Source {
+            tag: String,
+            installed_apps: holochain_types::app::InstalledAppMap,
+            other_field: u32,
+        }
+
+        let src = Source {
+            tag: "irrelevant".to_string(),
+            installed_apps: Default::default(),
+            other_field: 42,
+        };
+
+        let bytes = holochain_serialized_bytes::encode(&src).unwrap();
+        let view: ConductorStateView = holochain_serialized_bytes::decode(&bytes).unwrap();
+
+        assert!(view.installed_apps.is_empty());
+    }
+
+    #[test]
+    fn conductor_state_view_round_trips_one_installed_app() {
+        use holochain_types::app::{
+            AppManifest, AppManifestV0, AppRoleManifest, InstalledApp, InstalledAppCommon,
+            InstalledAppMap,
+        };
+        use holochain_types::prelude::Timestamp;
+
+        let app_id = "my-app".to_string();
+        let agent_key = AgentPubKey::from_raw_36(vec![7; 36]);
+        let manifest = AppManifest::V0(AppManifestV0 {
+            name: "my-app".to_string(),
+            description: None,
+            roles: vec![AppRoleManifest::sample("role-0".to_string())],
+            allow_deferred_memproofs: false,
+            bootstrap_url: None,
+            signal_url: None,
+        });
+        let common = InstalledAppCommon::new(
+            app_id.clone(),
+            agent_key.clone(),
+            Vec::<(_, _)>::new(),
+            manifest,
+            Timestamp::now(),
+        )
+        .unwrap();
+        let installed = InstalledApp::new_fresh(common);
+
+        let mut installed_apps = InstalledAppMap::new();
+        installed_apps.insert(app_id.clone(), installed);
+
+        #[derive(Debug, serde::Serialize)]
+        struct Source {
+            tag: String,
+            installed_apps: InstalledAppMap,
+        }
+
+        let bytes = holochain_serialized_bytes::encode(&Source {
+            tag: "irrelevant".to_string(),
+            installed_apps,
+        })
+        .unwrap();
+        let view: ConductorStateView = holochain_serialized_bytes::decode(&bytes).unwrap();
+
+        let apps: Vec<_> = view.installed_apps.into_values().collect();
+        assert_eq!(apps.len(), 1);
+        assert_eq!(apps[0].id(), &app_id);
+        assert_eq!(apps[0].agent_key, agent_key);
     }
 }

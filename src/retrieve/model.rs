@@ -7,7 +7,8 @@ use diesel::sql_types::{SmallInt, Text};
 use diesel::{AsExpression, FromSqlRow};
 use holochain_zome_types::Entry;
 use holochain_zome_types::prelude::{
-    AnyLinkableHash, DhtOpHash, SignedAction, SignedWarrant, Timestamp,
+    AnyLinkableHash, BlockTargetId, BlockTargetReason, DhtOpHash, SignedAction, SignedWarrant,
+    Timestamp,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -405,6 +406,40 @@ pub struct SliceHash {
     pub arc_end: i32,
     pub slice_index: i64,
     pub hash: Vec<u8>,
+}
+
+#[derive(Debug, Queryable, Selectable)]
+#[diesel(table_name = crate::retrieve::schema::BlockSpan)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct DbBlockSpan {
+    pub id: i64,
+    pub target_id: Vec<u8>,
+    pub target_reason: Vec<u8>,
+    pub start_us: i64,
+    pub end_us: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BlockRecord {
+    pub id: i64,
+    pub target: BlockTargetId,
+    pub reason: BlockTargetReason,
+    pub start: Timestamp,
+    pub end: Timestamp,
+}
+
+impl TryFrom<DbBlockSpan> for BlockRecord {
+    type Error = HcOpsError;
+
+    fn try_from(value: DbBlockSpan) -> Result<Self, Self::Error> {
+        Ok(BlockRecord {
+            id: value.id,
+            target: holochain_serialized_bytes::decode(&value.target_id)?,
+            reason: holochain_serialized_bytes::decode(&value.target_reason)?,
+            start: Timestamp(value.start_us),
+            end: Timestamp(value.end_us),
+        })
+    }
 }
 
 impl PartialOrd for SliceHash {

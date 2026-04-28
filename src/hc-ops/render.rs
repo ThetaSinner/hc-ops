@@ -116,6 +116,22 @@ impl From<ConductorTag> for ConductorTagTable {
 }
 
 #[derive(Tabled)]
+pub struct ActionCountByAuthorTable {
+    pub agent: String,
+    pub actions: i64,
+}
+
+impl From<(AgentPubKey, i64)> for ActionCountByAuthorTable {
+    fn from((agent, actions): (AgentPubKey, i64)) -> Self {
+        use holochain_zome_types::prelude::AgentPubKeyB64;
+        Self {
+            agent: AgentPubKeyB64::from(agent).to_string(),
+            actions,
+        }
+    }
+}
+
+#[derive(Tabled)]
 pub struct SliceHashTable {
     pub dht_arc: String,
     pub slice_index: u64,
